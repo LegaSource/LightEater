@@ -331,7 +331,7 @@ namespace LightEater.Behaviours
             switch (lightSource)
             {
                 case RadMechAI radMech:
-                    currentCharge += 1f;
+                    currentCharge += ConfigManager.oldBirdCharge.Value;
                     if (!radMech.isEnemyDead)
                     {
                         GameObject gameObject = Instantiate(radMech.enemyType.nestSpawnPrefab, radMech.transform.position, radMech.transform.rotation);
@@ -340,12 +340,12 @@ namespace LightEater.Behaviours
                     }
                     break;
                 case GrabbableObject grabbableObject:
-                    currentCharge += 0.2f;
+                    currentCharge += ConfigManager.itemCharge.Value;
                     if (grabbableObject is FlashlightItem flashlight)
                         flashlight.flashlightInterferenceLevel = 0;
                     break;
                 case Animator:
-                    currentCharge += 0.2f;
+                    currentCharge += ConfigManager.lightCharge.Value;
                     if (lightSource is Animator poweredLightAnimator)
                     {
                         poweredLightAnimator.SetBool("on", false);

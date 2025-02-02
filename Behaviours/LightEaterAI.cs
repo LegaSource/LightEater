@@ -267,16 +267,18 @@ namespace LightEater.Behaviours
 
         public IEnumerator AbsorbLightCoroutine()
         {
+            bool isAbsorbed = true;
             float absorbDuration = 5f;
             float timePassed = 0f;
             object lightSource = DetermineLightSource();
 
             creatureSFX.PlayOneShot(AbsorptionSound);
 
+            FlashlightItem flashlight = lightSource as FlashlightItem;
             if (lightSource is GrabbableObject grabbableObject)
             {
                 absorbDuration *= grabbableObject.insertedBattery.charge;
-                if (grabbableObject is FlashlightItem flashlight)
+                if (flashlight != null)
                 {
                     flashlight.flashlightAudio.PlayOneShot(flashlight.flashlightFlicker);
                     WalkieTalkie.TransmitOneShotAudio(flashlight.flashlightAudio, flashlight.flashlightFlicker, 0.8f);
@@ -289,10 +291,19 @@ namespace LightEater.Behaviours
                 yield return new WaitForSeconds(0.5f);
                 timePassed += 0.5f;
 
-                if (!HandleLightConsumption(lightSource, absorbDuration, timePassed)) break;
+                if (!HandleLightConsumption(lightSource, absorbDuration, timePassed))
+                {
+                    isAbsorbed = false;
+                    break;
+                }
             }
 
-            HandleLightDepletion(lightSource);
+            if (flashlight != null)
+                flashlight.flashlightInterferenceLevel = 0;
+
+            if (isAbsorbed)
+                HandleLightDepletion(lightSource);
+
             closestLightSource = null;
             absorbLightCoroutine = null;
         }
@@ -315,10 +326,10 @@ namespace LightEater.Behaviours
             {
                 case RadMechAI radMech:
                     radMech.FlickerFace();
-                    return !radMech.isEnemyDead;
+                    return !radMech.isEnemyDead && !radMech.inFlyingMode;
                 case GrabbableObject grabbableObject:
                     grabbableObject.insertedBattery.charge = Mathf.Max(0f, 1f - (timePassed + (5f - absorbDuration)) / 5f);
-                    return Vector3.Distance(transform.position, grabbableObject.transform.position) <= 15f;
+                    return !(Vector3.Distance(transform.position, grabbableObject.transform.position) > 15f && grabbableObject.insertedBattery.charge > 0);
                 case Animator poweredLightAnimator:
                     poweredLightAnimator?.SetTrigger("Flicker");
                     break;
@@ -332,17 +343,16 @@ namespace LightEater.Behaviours
             {
                 case RadMechAI radMech:
                     currentCharge += ConfigManager.oldBirdCharge.Value;
-                    if (!radMech.isEnemyDead)
+                    if (IsOwner && !radMech.isEnemyDead)
                     {
                         GameObject gameObject = Instantiate(radMech.enemyType.nestSpawnPrefab, radMech.transform.position, radMech.transform.rotation);
+                        gameObject.GetComponentInChildren<NetworkObject>().Spawn(true);
                         LightEater.radMechAIs.Remove(radMech);
                         radMech.KillEnemyOnOwnerClient(true);
                     }
                     break;
                 case GrabbableObject grabbableObject:
                     currentCharge += ConfigManager.itemCharge.Value;
-                    if (grabbableObject is FlashlightItem flashlight)
-                        flashlight.flashlightInterferenceLevel = 0;
                     break;
                 case Animator:
                     currentCharge += ConfigManager.lightCharge.Value;

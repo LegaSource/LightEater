@@ -89,7 +89,7 @@ namespace LightEater.Behaviours
             {
                 case (int)State.WANDERING:
                     agent.speed = 2f;
-                    if (FoundClosestPlayerInRange(25f, 10f))
+                    if (FoundClosestPlayerInRange(25, 10))
                     {
                         StopSearch(currentSearch);
                         DoAnimationClientRpc("startRun");
@@ -106,7 +106,7 @@ namespace LightEater.Behaviours
                     break;
                 case (int)State.HUNTING:
                     agent.speed = ConfigManager.huntingSpeed.Value;
-                    if (FoundClosestPlayerInRange(25f, 10f))
+                    if (FoundClosestPlayerInRange(25, 10))
                     {
                         SwitchToBehaviourClientRpc((int)State.CHASING);
                         return;
@@ -160,15 +160,12 @@ namespace LightEater.Behaviours
             }
         }
 
-        public bool FoundClosestPlayerInRange(float range, float senseRange)
+        bool FoundClosestPlayerInRange(int range, int senseRange)
         {
-            TargetClosestPlayer(bufferDistance: 1.5f, requireLineOfSight: true);
-            if (targetPlayer == null)
-            {
-                TargetClosestPlayer(bufferDistance: 1.5f, requireLineOfSight: false);
-                range = senseRange;
-            }
-            return targetPlayer != null && Vector3.Distance(transform.position, targetPlayer.transform.position) < range;
+            PlayerControllerB player = CheckLineOfSightForPlayer(60f, range, senseRange);
+            if (player == null || !PlayerIsTargetable(player)) return false;
+
+            return targetPlayer = player;
         }
 
         public bool FoundLightSource()
@@ -388,8 +385,7 @@ namespace LightEater.Behaviours
                     targetPlayer = StartOfRound.Instance.allPlayerScripts[i];
                 }
             }
-            if (targetPlayer == null) return false;
-            return true;
+            return targetPlayer != null;
         }
 
         public bool AbsorbPlayerObject()
@@ -497,7 +493,7 @@ namespace LightEater.Behaviours
             if (Vector3.Distance(transform.position, entranceTeleport.entrancePoint.position) < 1f)
             {
                 Vector3 exitPosition = GetEntranceExitPosition(entranceTeleport);
-                TeleportEnemyClientRpc(exitPosition, !isOutside);
+                StartCoroutine(TeleportEnemyCoroutine(exitPosition));
                 return;
             }
 
@@ -516,6 +512,12 @@ namespace LightEater.Behaviours
             return entrances.FirstOrDefault(e => e.isEntranceToBuilding != entranceTeleport.isEntranceToBuilding && e.entranceId == entranceTeleport.entranceId)
                     .entrancePoint
                     .position;
+        }
+
+        public IEnumerator TeleportEnemyCoroutine(Vector3 position)
+        {
+            yield return new WaitForSeconds(1f);
+            TeleportEnemyClientRpc(position, !isOutside);
         }
 
         [ClientRpc]

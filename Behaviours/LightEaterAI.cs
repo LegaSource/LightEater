@@ -1,5 +1,7 @@
 ﻿using GameNetcodeStuff;
 using LightEater.Managers;
+using LightEater.Patches;
+using LightEater.Values;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -12,7 +14,7 @@ namespace LightEater.Behaviours
 {
     public class LightEaterAI : EnemyAI
     {
-        public float currentCharge = 0f;
+        public int currentCharge = 0;
 
         public Transform TurnCompass;
         public AudioClip[] MoveSounds = Array.Empty<AudioClip>();
@@ -24,6 +26,7 @@ namespace LightEater.Behaviours
 
         public List<EntranceTeleport> entrances;
 
+        public int absorbDistance = 5;
         public GameObject closestLightSource;
         private float explodeTimer = 0f;
         public bool absorbPlayerObject = false;
@@ -48,6 +51,7 @@ namespace LightEater.Behaviours
             StartSearch(transform.position);
 
             entrances = FindObjectsOfType<EntranceTeleport>().ToList();
+            StormyWeatherPatch.lightEaters.Add(this);
         }
 
         public override void Update()
@@ -88,75 +92,36 @@ namespace LightEater.Behaviours
             switch (currentBehaviourStateIndex)
             {
                 case (int)State.WANDERING:
-                    agent.speed = 2f;
-                    if (FoundClosestPlayerInRange(25, 10))
-                    {
-                        StopSearch(currentSearch);
-                        DoAnimationClientRpc("startRun");
-                        SwitchToBehaviourClientRpc((int)State.CHASING);
-                        return;
-                    }
-                    if (FoundLightSource())
-                    {
-                        StopSearch(currentSearch);
-                        DoAnimationClientRpc("startRun");
-                        SwitchToBehaviourClientRpc((int)State.HUNTING);
-                        return;
-                    }
+                    DoWandering();
                     break;
                 case (int)State.HUNTING:
-                    agent.speed = ConfigManager.huntingSpeed.Value;
-                    if (FoundClosestPlayerInRange(25, 10))
-                    {
-                        SwitchToBehaviourClientRpc((int)State.CHASING);
-                        return;
-                    }
-                    if (CloseToLightSource())
-                    {
-                        DoAnimationClientRpc("startAbsorb");
-                        SwitchToBehaviourClientRpc((int)State.ABSORBING);
-                        return;
-                    }
+                    DoHunting();
                     break;
                 case (int)State.ABSORBING:
-                    agent.speed = 0f;
-                    if (closestLightSource == null)
-                    {
-                        StartSearch(transform.position);
-                        DoAnimationClientRpc("startWalk");
-                        SwitchToBehaviourClientRpc((int)State.WANDERING);
-                        return;
-                    }
-                    AbsorbLight();
+                    DoAbsorbing();
                     break;
                 case (int)State.CHASING:
-                    agent.speed = ConfigManager.chasingSpeed.Value;
-                    if (TargetOutsideChasedPlayer()) return;
-                    if (explodeTimer < 10f)
-                    {
-                        SetMovingTowardsTargetPlayer(targetPlayer);
-                        return;
-                    }
-                    if (!TargetClosestPlayerInAnyCase() || (Vector3.Distance(transform.position, targetPlayer.transform.position) > 20f && !CheckLineOfSightForPosition(targetPlayer.transform.position)))
-                    {
-                        StartSearch(transform.position);
-                        DoAnimationClientRpc("startWalk");
-                        SwitchToBehaviourClientRpc((int)State.WANDERING);
-                        return;
-                    }
-                    if (StunExplosion()) return;
-                    if (AbsorbPlayerObject() || CrossingLight())
-                    {
-                        absorbPlayerObject = false;
-                        DoAnimationClientRpc("startAbsorb");
-                        SwitchToBehaviourClientRpc((int)State.ABSORBING);
-                        return;
-                    }
-                    SetMovingTowardsTargetPlayer(targetPlayer);
+                    DoChasing();
                     break;
+            }
+        }
 
-                default:
-                    break;
+        public void DoWandering()
+        {
+            agent.speed = 2f;
+            if (FoundClosestPlayerInRange(25, 10))
+            {
+                StopSearch(currentSearch);
+                DoAnimationClientRpc("startRun");
+                SwitchToBehaviourClientRpc((int)State.CHASING);
+                return;
+            }
+            if (FoundLightSource())
+            {
+                StopSearch(currentSearch);
+                DoAnimationClientRpc("startRun");
+                SwitchToBehaviourClientRpc((int)State.HUNTING);
+                return;
             }
         }
 
@@ -173,115 +138,156 @@ namespace LightEater.Behaviours
             // Si on croise une lumière sur le chemin
             if (CrossingLight()) return true;
 
-            // Sinon se diriger vers la lumière la plus proche en priorisant les Old Birds
-            if (LightEater.radMechAIs.Any(r => !r.isEnemyDead))
+            // Se diriger vers la lumière la plus proche
+            if (TimeOfDay.Instance.hour >= ConfigManager.shipMinHour.Value && !ShipLightsPatch.hasBeenAbsorbed)
             {
-                closestLightSource = LightEater.radMechAIs.Where(r => !r.isEnemyDead)
+                absorbDistance = 20;
+                closestLightSource = StartOfRound.Instance.shipRoomLights.gameObject;
+            }
+            else if (LightEater.enemies.Any(r => !r.isEnemyDead))
+            {
+                EnemyAI closestEnemy = LightEater.enemies.Where(r => !r.isEnemyDead)
                     .OrderBy(r => Vector3.Distance(transform.position, r.transform.position))
-                    .FirstOrDefault()
-                    .gameObject;
+                    .FirstOrDefault();
+                absorbDistance = ConfigManager.enemiesValues
+                    .FirstOrDefault(e => e.EnemyName.Equals(closestEnemy.enemyType.enemyName))?
+                    .AbsorbDistance
+                        ?? 5;
+                closestLightSource = closestEnemy.gameObject;
             }
             else
             {
+                absorbDistance = 5;
                 if (!isOutside)
                 {
                     path1 = new NavMeshPath();
                     closestLightSource = RoundManager.Instance.allPoweredLightsAnimators
-                        .Where(l => agent.CalculatePath(ChooseClosestNodeToPosition(l.transform.position).position, path1))
+                        .Where(l => l != null && agent.CalculatePath(ChooseClosestNodeToPosition(l.transform.position).position, path1))
                         .OrderBy(l => Vector3.Distance(transform.position, l.transform.position))
-                        .FirstOrDefault()
+                        .FirstOrDefault()?
                         .gameObject;
                 }
                 else
                 {
                     closestLightSource = RoundManager.Instance.allPoweredLightsAnimators
+                        .Where(l => l != null)
                         .OrderBy(l => Vector3.Distance(GetEntranceExitPosition(GetClosestEntrance()), l.transform.position))
-                        .FirstOrDefault()
+                        .FirstOrDefault()?
                         .gameObject;
                 }
             }
             return closestLightSource != null;
         }
 
-        public bool CrossingLight()
+        public void DoHunting()
         {
-            closestLightSource = RoundManager.Instance.allPoweredLightsAnimators
-                .FirstOrDefault(l => Vector3.Distance(transform.position, l.transform.position) <= 10f)?
-                .gameObject
-                ?? LightEater.grabbableObjects
-                    .FirstOrDefault(g => g.insertedBattery.charge > 0f && Vector3.Distance(transform.position, g.transform.position) <= 10f)?
-                    .gameObject;
-            return closestLightSource != null;
+            agent.speed = ConfigManager.huntingSpeed.Value;
+            if (FoundClosestPlayerInRange(25, 10))
+            {
+                SwitchToBehaviourClientRpc((int)State.CHASING);
+                return;
+            }
+            if (CloseToLightSource())
+            {
+                DoAnimationClientRpc("startAbsorb");
+                SwitchToBehaviourClientRpc((int)State.ABSORBING);
+                return;
+            }
         }
 
         public bool CloseToLightSource()
         {
+            CrossingLight();
             object lightSource = DetermineLightSource();
 
-            if ((lightSource is RadMechAI && !isOutside)
+            if ((lightSource is ShipLights && !isOutside)
+                || (lightSource is EnemyAI enemy && enemy.isOutside != isOutside)
                 || (lightSource is Animator && isOutside))
             {
                 GoTowardsEntrance();
                 return false;
             }
 
-            Vector3 closestPosition = lightSource is RadMechAI ? closestLightSource.transform.position : ChooseClosestNodeToPosition(closestLightSource.transform.position).position;
+            Vector3 closestPosition = lightSource switch
+            {
+                ShipLights => StartOfRound.Instance.shipLandingPosition.position,
+                EnemyAI => closestLightSource.transform.position,
+                _ => ChooseClosestNodeToPosition(closestLightSource.transform.position).position,
+            };
             SetDestinationToPosition(closestPosition);
-            return Vector3.Distance(eye.transform.position, closestLightSource.transform.position) < 5f || Vector3.Distance(transform.position, closestPosition) < 1f;
+            return Vector3.Distance(eye.transform.position, closestLightSource.transform.position) < absorbDistance || Vector3.Distance(transform.position, closestPosition) < 1f;
         }
 
-        public void AbsorbLight()
+        public void DoAbsorbing()
+        {
+            agent.speed = 0f;
+            if (closestLightSource == null)
+            {
+                StartSearch(transform.position);
+                DoAnimationClientRpc("startWalk");
+                SwitchToBehaviourClientRpc((int)State.WANDERING);
+                return;
+            }
+            AbsorbLight(absorbDistance);
+        }
+
+        public void AbsorbLight(int absorbDistance)
         {
             if (absorbLightCoroutine != null) return;
 
             NetworkObject networkObject = closestLightSource.GetComponent<NetworkObject>();
             if (networkObject != null)
-                AbsorbLightClientRpc(networkObject);
+                AbsorbLightClientRpc(networkObject, absorbDistance);
             else
-                AbsorbLightClientRpc(closestLightSource.transform.position);
+                AbsorbLightClientRpc(closestLightSource.name, closestLightSource.transform.position, absorbDistance);
         }
 
         [ClientRpc]
-        public void AbsorbLightClientRpc(NetworkObjectReference obj)
+        public void AbsorbLightClientRpc(NetworkObjectReference obj, int absorbDistance)
         {
-            if (obj.TryGet(out NetworkObject networkObject))
+            if (!obj.TryGet(out NetworkObject networkObject)) return;
+
+            this.absorbDistance = absorbDistance;
+            closestLightSource = networkObject.gameObject;
+            absorbLightCoroutine ??= StartCoroutine(AbsorbLightCoroutine());
+        }
+
+        // Si aucun NetworkObject
+        [ClientRpc]
+        public void AbsorbLightClientRpc(string objectName, Vector3 position, int absorbDistance)
+        {
+            this.absorbDistance = absorbDistance;
+            closestLightSource = objectName switch
             {
-                closestLightSource = networkObject.gameObject;
-                absorbLightCoroutine ??= StartCoroutine(AbsorbLightCoroutine());
-            }
-        }
-
-        // Si aucun NetworkObject, il s'agit d'une lumière
-        [ClientRpc]
-        public void AbsorbLightClientRpc(Vector3 position)
-        {
-            closestLightSource = RoundManager.Instance.allPoweredLightsAnimators
-                .OrderBy(l => Vector3.Distance(position, l.transform.position))
-                .FirstOrDefault()
-                .gameObject;
+                Constants.SHIP_LIGHTS => StartOfRound.Instance.shipRoomLights.gameObject,
+                Constants.TURRET => LightEater.turrets
+                    .Where(t => t != null)
+                    .OrderBy(t => Vector3.Distance(position, t.transform.position))
+                    .FirstOrDefault()
+                    .gameObject,
+                Constants.LANDMINE => LightEater.landmines
+                    .Where(l => l != null)
+                    .OrderBy(l => Vector3.Distance(position, l.transform.position))
+                    .FirstOrDefault()
+                    .gameObject,
+                _ => RoundManager.Instance.allPoweredLightsAnimators
+                    .Where(l => l != null)
+                    .OrderBy(l => Vector3.Distance(position, l.transform.position))
+                    .FirstOrDefault()
+                    .gameObject,
+            };
             absorbLightCoroutine ??= StartCoroutine(AbsorbLightCoroutine());
         }
 
         public IEnumerator AbsorbLightCoroutine()
         {
+            object lightSource = DetermineLightSource();
             bool isAbsorbed = true;
             float absorbDuration = 5f;
             float timePassed = 0f;
-            object lightSource = DetermineLightSource();
 
             creatureSFX.PlayOneShot(AbsorptionSound);
-
-            FlashlightItem flashlight = lightSource as FlashlightItem;
-            if (lightSource is GrabbableObject grabbableObject)
-            {
-                absorbDuration *= grabbableObject.insertedBattery.charge;
-                if (flashlight != null)
-                {
-                    flashlight.flashlightAudio.PlayOneShot(flashlight.flashlightFlicker);
-                    WalkieTalkie.TransmitOneShotAudio(flashlight.flashlightAudio, flashlight.flashlightFlicker, 0.8f);
-                    flashlight.flashlightInterferenceLevel = 1;
-                }
-            }
+            HandleLightInitialization(lightSource, ref absorbDuration);
 
             while (timePassed < absorbDuration)
             {
@@ -295,38 +301,59 @@ namespace LightEater.Behaviours
                 }
             }
 
-            if (flashlight != null)
-                flashlight.flashlightInterferenceLevel = 0;
-
-            if (isAbsorbed)
-                HandleLightDepletion(lightSource);
+            if (lightSource is FlashlightItem flashlight) flashlight.flashlightInterferenceLevel = 0;
+            if (isAbsorbed) HandleLightDepletion(lightSource);
 
             closestLightSource = null;
             absorbLightCoroutine = null;
         }
 
-        public object DetermineLightSource()
+        public void HandleLightInitialization(object lightSource, ref float absorbDuration)
         {
-            if (closestLightSource.TryGetComponent(out GrabbableObject grabbableObject))
-                return grabbableObject;
+            switch (lightSource)
+            {
+                case GrabbableObject grabbableObject:
+                    absorbDuration *= grabbableObject.insertedBattery.charge;
+                    if (lightSource is FlashlightItem flashlight)
+                    {
+                        flashlight.flashlightAudio.PlayOneShot(flashlight.flashlightFlicker);
+                        WalkieTalkie.TransmitOneShotAudio(flashlight.flashlightAudio, flashlight.flashlightFlicker, 0.8f);
+                        flashlight.flashlightInterferenceLevel = 1;
+                    }
+                    break;
 
-            if (closestLightSource.GetComponentInParent<RadMechAI>() is RadMechAI radMech)
-                return radMech;
-
-            return RoundManager.Instance.allPoweredLightsAnimators
-                .FirstOrDefault(l => l.gameObject == closestLightSource);
+                case ShipLights:
+                    StartOfRound.Instance.PowerSurgeShip();
+                    StartOfRound.Instance.shipAnimatorObject.gameObject.GetComponent<Animator>().SetBool("AlarmRinging", value: true);
+                    StartOfRound.Instance.shipDoorAudioSource.PlayOneShot(StartOfRound.Instance.alarmSFX);
+                    break;
+            }
         }
 
         public bool HandleLightConsumption(object lightSource, float absorbDuration, float timePassed)
         {
             switch (lightSource)
             {
-                case RadMechAI radMech:
-                    radMech.FlickerFace();
-                    return !radMech.isEnemyDead && !radMech.inFlyingMode;
+                case ShipLights:
+                    StartOfRound.Instance.shipDoorsAnimator.SetBool("Closed", value: !StartOfRound.Instance.shipDoorsAnimator.GetBool("Closed"));
+                    break;
+
+                case EnemyAI enemy:
+                    if (enemy is RadMechAI radMech)
+                    {
+                        radMech.FlickerFace();
+                        if (radMech.inFlyingMode) return false;
+                    }
+                    return !enemy.isEnemyDead;
+
                 case GrabbableObject grabbableObject:
                     grabbableObject.insertedBattery.charge = Mathf.Max(0f, 1f - (timePassed + (5f - absorbDuration)) / 5f);
                     return !(Vector3.Distance(transform.position, grabbableObject.transform.position) > 15f && grabbableObject.insertedBattery.charge > 0);
+
+                case Turret turret:
+                    turret.SwitchTurretMode((int)TurretMode.Berserk);
+                    break;
+
                 case Animator poweredLightAnimator:
                     poweredLightAnimator?.SetTrigger("Flicker");
                     break;
@@ -338,19 +365,58 @@ namespace LightEater.Behaviours
         {
             switch (lightSource)
             {
-                case RadMechAI radMech:
-                    currentCharge += ConfigManager.oldBirdCharge.Value;
-                    if (IsOwner && !radMech.isEnemyDead)
-                    {
-                        GameObject gameObject = Instantiate(radMech.enemyType.nestSpawnPrefab, radMech.transform.position, radMech.transform.rotation);
-                        gameObject.GetComponentInChildren<NetworkObject>().Spawn(true);
-                        LightEater.radMechAIs.Remove(radMech);
-                        radMech.KillEnemyOnOwnerClient(true);
-                    }
+                case ShipLights:
+                    currentCharge += 200;
+                    ShipLightsPatch.hasBeenAbsorbed = true;
+                    StartOfRoundPatch.EnablesShipFunctionalities(false);
+                    StartOfRound.Instance.shipAnimatorObject.gameObject.GetComponent<Animator>().SetBool("AlarmRinging", value: false);
                     break;
+
+                case EnemyAI enemy:
+                    EnemyValue enemyValue = ConfigManager.enemiesValues.FirstOrDefault(e => e.EnemyName.Equals(enemy.enemyType.enemyName));
+                    currentCharge += enemyValue?.AbsorbCharge ?? 20;
+
+                    if (!IsOwner) break;
+                    LightEater.enemies.Remove(enemy);
+
+                    if (enemy.isEnemyDead) break;
+
+                    switch (enemy.enemyType.enemyName)
+                    {
+                        case Constants.OLD_BIRD_NAME:
+                            GameObject gameObject = Instantiate(enemy.enemyType.nestSpawnPrefab, enemy.transform.position, enemy.transform.rotation);
+                            gameObject.GetComponentInChildren<NetworkObject>().Spawn(true);
+                            break;
+                    }
+                    enemy.KillEnemyOnOwnerClient(enemyValue?.Destroy ?? true);
+                    break;
+
                 case GrabbableObject grabbableObject:
                     currentCharge += ConfigManager.itemCharge.Value;
+                    LightEater.grabbableObjects.Remove(grabbableObject);
                     break;
+
+                case Turret turret:
+                    currentCharge += ConfigManager.turretCharge.Value;
+                    
+                    turret.ToggleTurretEnabledLocalClient(false);
+                    turret.mainAudio.Stop();
+                    turret.farAudio.Stop();
+                    turret.berserkAudio.Stop();
+                    if (turret.fadeBulletAudioCoroutine != null) StopCoroutine(turret.fadeBulletAudioCoroutine);
+                    turret.fadeBulletAudioCoroutine = StartCoroutine(turret.FadeBulletAudio());
+                    turret.bulletParticles.Stop(withChildren: true, ParticleSystemStopBehavior.StopEmitting);
+                    turret.turretAnimator.SetInteger("TurretMode", 0);
+
+                    LightEater.turrets.Remove(turret);
+                    break;
+
+                case Landmine landmine:
+                    currentCharge += ConfigManager.landmineCharge.Value;
+                    landmine.ToggleMineEnabledLocalClient(false);
+                    LightEater.landmines.Remove(landmine);
+                    break;
+
                 case Animator:
                     currentCharge += ConfigManager.lightCharge.Value;
                     if (lightSource is Animator poweredLightAnimator)
@@ -360,6 +426,33 @@ namespace LightEater.Behaviours
                     }
                     break;
             }
+        }
+
+        public void DoChasing()
+        {
+            agent.speed = ConfigManager.chasingSpeed.Value;
+            if (TargetOutsideChasedPlayer()) return;
+            if (explodeTimer < 10f)
+            {
+                SetMovingTowardsTargetPlayer(targetPlayer);
+                return;
+            }
+            if (!TargetClosestPlayerInAnyCase() || (Vector3.Distance(transform.position, targetPlayer.transform.position) > 20f && !CheckLineOfSightForPosition(targetPlayer.transform.position)))
+            {
+                StartSearch(transform.position);
+                DoAnimationClientRpc("startWalk");
+                SwitchToBehaviourClientRpc((int)State.WANDERING);
+                return;
+            }
+            if (StunExplosion()) return;
+            if (AbsorbPlayerObject() || CrossingLight())
+            {
+                absorbPlayerObject = false;
+                DoAnimationClientRpc("startAbsorb");
+                SwitchToBehaviourClientRpc((int)State.ABSORBING);
+                return;
+            }
+            SetMovingTowardsTargetPlayer(targetPlayer);
         }
 
         public bool TargetOutsideChasedPlayer()
@@ -388,49 +481,13 @@ namespace LightEater.Behaviours
             return targetPlayer != null;
         }
 
-        public bool AbsorbPlayerObject()
-        {
-            if (Vector3.Distance(transform.position, targetPlayer.transform.position) > 15f) return false;
-            if (absorbPlayerObject) return true;
-
-            AbsorbPlayerObjectClientRpc((int)targetPlayer.playerClientId);
-            return absorbPlayerObject;
-        }
-
-        [ClientRpc]
-        public void AbsorbPlayerObjectClientRpc(int playerId)
-        {
-            PlayerControllerB player = StartOfRound.Instance.allPlayerObjects[playerId].GetComponent<PlayerControllerB>();
-            if (player != GameNetworkManager.Instance.localPlayerController) return;
-
-            for (int i = 0; i < player.ItemSlots.Length; i++)
-            {
-                GrabbableObject grabbableObject = player.ItemSlots[i];
-                if (grabbableObject != null && grabbableObject.itemProperties.requiresBattery && grabbableObject.insertedBattery.charge > 0f)
-                {
-                    closestLightSource = grabbableObject.gameObject;
-                    return;
-                }
-            }
-        }
-
-        [ServerRpc(RequireOwnership = false)]
-        public void AbsorbPlayerObjectServerRpc(NetworkObjectReference obj)
-        {
-            if (obj.TryGet(out NetworkObject networkObject))
-            {
-                absorbPlayerObject = true;
-                closestLightSource = networkObject.gameObject;
-            }
-        }
-
         public bool StunExplosion()
         {
-            if (currentCharge < 1f || explodeTimer < 10f) return false;
+            if (currentCharge < 100 || explodeTimer < 10f) return false;
             if (!targetPlayer.HasLineOfSightToPosition(eye.position, 60f, 15)) return false;
 
             agent.speed = 0f;
-            currentCharge -= 1f;
+            currentCharge -= 100;
             explodeTimer = 0f;
 
             StunExplosionClientRpc();
@@ -449,8 +506,37 @@ namespace LightEater.Behaviours
             yield return new WaitForSeconds(0.75f);
 
             creatureSFX.PlayOneShot(ExplosionSound);
-            StunGrenadeItem.StunExplosion(eye.position, affectAudio: true, flashSeverityMultiplier: 9999f, enemyStunTime: 2f);
+            StunGrenadeItem.StunExplosion(eye.position, affectAudio: true, flashSeverityMultiplier: 2f, enemyStunTime: 2f);
             creatureAnimator.SetTrigger("startRun");
+        }
+
+        public bool AbsorbPlayerObject()
+        {
+            if (Vector3.Distance(transform.position, targetPlayer.transform.position) > 15f) return false;
+            if (absorbPlayerObject) return true;
+
+            AbsorbPlayerObjectClientRpc((int)targetPlayer.playerClientId);
+            return absorbPlayerObject;
+        }
+
+        [ClientRpc]
+        public void AbsorbPlayerObjectClientRpc(int playerId)
+        {
+            PlayerControllerB player = StartOfRound.Instance.allPlayerObjects[playerId].GetComponent<PlayerControllerB>();
+            if (player != GameNetworkManager.Instance.localPlayerController) return;
+
+            for (int i = 0; i < player.ItemSlots.Length; i++)
+            {
+                GrabbableObject grabbableObject = player.ItemSlots[i];
+                if (grabbableObject == null) continue;
+                if (!grabbableObject.itemProperties.requiresBattery) continue;
+                if (grabbableObject.insertedBattery == null) continue;
+                if (grabbableObject.insertedBattery.charge <= 0f) continue;
+
+                absorbDistance = 5;
+                closestLightSource = grabbableObject.gameObject;
+                return;
+            }
         }
 
         public override void OnCollideWithPlayer(Collider other)
@@ -486,6 +572,40 @@ namespace LightEater.Behaviours
             attackCoroutine = null;
         }
 
+        public bool CrossingLight()
+        {
+            GameObject crossedLight = RoundManager.Instance.allPoweredLightsAnimators
+                .FirstOrDefault(l => l != null && Vector3.Distance(transform.position, l.transform.position) <= 10f)?
+                .gameObject
+                ?? LightEater.grabbableObjects
+                    .FirstOrDefault(g => g.insertedBattery != null && g.insertedBattery.charge > 0f && Vector3.Distance(transform.position, g.transform.position) <= 10f)?
+                    .gameObject
+                ?? LightEater.turrets
+                    .FirstOrDefault(t => t != null && t.turretActive && Vector3.Distance(transform.position, t.transform.position) <= 10f)?
+                    .gameObject
+                ?? LightEater.landmines
+                    .FirstOrDefault(l => l != null && l.mineActivated && Vector3.Distance(transform.position, l.transform.position) <= 10f)?
+                    .gameObject;
+
+            if (crossedLight != null)
+            {
+                absorbDistance = 5;
+                closestLightSource = crossedLight;
+            }
+
+            return closestLightSource != null;
+        }
+
+        public object DetermineLightSource()
+        {
+            if (closestLightSource.GetComponentInParent<ShipLights>() is ShipLights shipLights) return shipLights;
+            if (closestLightSource.TryGetComponent(out GrabbableObject grabbableObject)) return grabbableObject;
+            if (closestLightSource.GetComponentInParent<Turret>() is Turret turret) return turret;
+            if (closestLightSource.GetComponentInParent<Landmine>() is Landmine landmine) return landmine;
+            if (closestLightSource.GetComponentInParent<EnemyAI>() is EnemyAI enemy) return enemy;
+            return RoundManager.Instance.allPoweredLightsAnimators.FirstOrDefault(l => l != null && l.gameObject == closestLightSource);
+        }
+
         public void GoTowardsEntrance()
         {
             EntranceTeleport entranceTeleport = GetClosestEntrance();
@@ -510,8 +630,8 @@ namespace LightEater.Behaviours
         public Vector3 GetEntranceExitPosition(EntranceTeleport entranceTeleport)
         {
             return entrances.FirstOrDefault(e => e.isEntranceToBuilding != entranceTeleport.isEntranceToBuilding && e.entranceId == entranceTeleport.entranceId)
-                    .entrancePoint
-                    .position;
+                .entrancePoint
+                .position;
         }
 
         public IEnumerator TeleportEnemyCoroutine(Vector3 position)

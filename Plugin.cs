@@ -17,7 +17,7 @@ namespace LightEater
     {
         private const string modGUID = "Lega.LightEater";
         private const string modName = "Light Eater";
-        private const string modVersion = "1.0.2";
+        private const string modVersion = "1.0.3";
 
         private readonly Harmony harmony = new Harmony(modGUID);
         private readonly static AssetBundle bundle = AssetBundle.LoadFromFile(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "lighteater"));
@@ -45,6 +45,7 @@ namespace LightEater
             harmony.PatchAll(typeof(TurretPatch));
             harmony.PatchAll(typeof(LandminePatch));
             harmony.PatchAll(typeof(EnemyAIPatch));
+            harmony.PatchAll(typeof(PatcherToolPatch));
             if (ConfigManager.interactWithStorm.Value) harmony.PatchAll(typeof(StormyWeatherPatch));
             if (ConfigManager.disableShipLights.Value) harmony.PatchAll(typeof(ShipLightsPatch));
             if (ConfigManager.disableShipDoor.Value) harmony.PatchAll(typeof(HangarShipDoorPatch));

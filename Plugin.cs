@@ -9,6 +9,7 @@ using HarmonyLib;
 using System.Collections.Generic;
 using LightEater.Managers;
 using LightEater.Patches;
+using System;
 
 namespace LightEater
 {
@@ -23,6 +24,8 @@ namespace LightEater
         private readonly static AssetBundle bundle = AssetBundle.LoadFromFile(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "lighteater"));
         internal static ManualLogSource mls;
         public static ConfigFile configFile;
+
+        public static bool isSellBodies = false;
 
         public static List<EnemyAI> enemies = new List<EnemyAI>();
         public static List<GrabbableObject> grabbableObjects = new List<GrabbableObject>();
@@ -52,6 +55,7 @@ namespace LightEater
             if (ConfigManager.disableItemCharger.Value) harmony.PatchAll(typeof(ItemChargerPatch));
             if (ConfigManager.disableShipScreen.Value) harmony.PatchAll(typeof(ManualCameraRendererPatch));
             if (ConfigManager.disableShipTeleporters.Value) harmony.PatchAll(typeof(ShipTeleporterPatch));
+            PatchOtherMods();
         }
 
         private static void NetcodePatcher()
@@ -75,5 +79,8 @@ namespace LightEater
             NetworkPrefabs.RegisterNetworkPrefab(lightEaterEnemy.enemyPrefab);
             Enemies.RegisterEnemy(lightEaterEnemy, ConfigManager.rarity.Value, Levels.LevelTypes.All, null, null);
         }
+
+        public static void PatchOtherMods()
+            => isSellBodies = Type.GetType("SellBodies.MyPluginInfo, SellBodies") != null;
     }
 }

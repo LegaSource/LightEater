@@ -708,7 +708,7 @@ namespace LightEater.Behaviours
 
             base.HitEnemy(force, playerWhoHit, playHitSFX, hitID);
             enemyHP -= force;
-            if (enemyHP <= 0 && IsOwner) KillEnemyOnOwnerClient();
+            if (enemyHP <= 0 && IsOwner) KillEnemyOnOwnerClient(!LightEater.isSellBodies);
         }
 
         public override void KillEnemy(bool destroy = false)
@@ -719,7 +719,7 @@ namespace LightEater.Behaviours
             creatureAnimator.SetTrigger("startExplode");
             creatureSFX.PlayOneShot(ChargeSound);
 
-            yield return new WaitForSeconds(5f);
+            yield return new WaitForSeconds(4f);
 
             base.KillEnemy(destroy);
             Landmine.SpawnExplosion(transform.position + Vector3.up, spawnExplosionEffect: true, 6f, 6.3f);

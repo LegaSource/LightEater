@@ -1,12 +1,11 @@
 ﻿using HarmonyLib;
 
-namespace LightEater.Patches
+namespace LightEater.Patches;
+
+internal class LandminePatch
 {
-    internal class LandminePatch
-    {
-        [HarmonyPatch(typeof(Landmine), nameof(Landmine.Start))]
-        [HarmonyPostfix]
-        private static void StartLandmine(ref Landmine __instance)
-            => RoundManagerPatch.AddLandmine(__instance);
-    }
+    [HarmonyPatch(typeof(Landmine), nameof(Landmine.Start))]
+    [HarmonyPostfix]
+    private static void StartLandmine(ref Landmine __instance)
+        => RoundManagerPatch.AddLandmine(__instance);
 }

@@ -1,12 +1,18 @@
 ﻿using HarmonyLib;
 
-namespace LightEater.Patches
+namespace LightEater.Patches;
+
+internal class GrabbableObjectPatch
 {
-    internal class GrabbableObjectPatch
+    [HarmonyPatch(typeof(GrabbableObject), nameof(GrabbableObject.Start))]
+    [HarmonyPostfix]
+    private static void StartGrabbableObject(ref GrabbableObject __instance)
     {
-        [HarmonyPatch(typeof(GrabbableObject), nameof(GrabbableObject.Start))]
-        [HarmonyPostfix]
-        private static void StartGrabbableObject(ref GrabbableObject __instance)
-            => RoundManagerPatch.AddGrabbableObject(__instance);
+        if (__instance is BeltBagItem beltBagItem)
+        {
+            RoundManagerPatch.AddBeltBagItem(beltBagItem);
+            return;
+        }
+        RoundManagerPatch.AddGrabbableObject(__instance);
     }
 }

@@ -3,127 +3,124 @@ using LightEater.Managers;
 using System.Linq;
 using UnityEngine;
 
-namespace LightEater.Patches
+namespace LightEater.Patches;
+
+internal class StartOfRoundPatch
 {
-    internal class StartOfRoundPatch
+    public static HangarShipDoor shipDoor;
+    public static StartMatchLever shipLever;
+    public static ItemCharger itemCharger;
+    public static Terminal terminal;
+    public static ShipTeleporter shipTeleporter;
+    public static ShipTeleporter inverseShipTeleporter;
+
+    [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.Start))]
+    [HarmonyPostfix]
+    private static void StartRound()
     {
-        public static HangarShipDoor shipDoor;
-        public static StartMatchLever shipLever;
-        public static ItemCharger itemCharger;
-        public static Terminal terminal;
-        public static ShipTeleporter shipTeleporter;
-        public static ShipTeleporter inverseShipTeleporter;
-
-        [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.Start))]
-        [HarmonyPostfix]
-        private static void StartRound()
+        if (ConfigManager.disableShipDoor.Value) shipDoor = Object.FindObjectOfType<HangarShipDoor>();
+        if (ConfigManager.disableShipLever.Value) shipLever = Object.FindObjectOfType<StartMatchLever>();
+        if (ConfigManager.disableItemCharger.Value) itemCharger = Object.FindObjectOfType<ItemCharger>();
+        if (ConfigManager.disableTerminal.Value) terminal = Object.FindObjectOfType<Terminal>();
+        if (ConfigManager.disableShipTeleporters.Value)
         {
-            if (ConfigManager.disableShipDoor.Value) shipDoor = Object.FindObjectOfType<HangarShipDoor>();
-            if (ConfigManager.disableShipLever.Value) shipLever = Object.FindObjectOfType<StartMatchLever>();
-            if (ConfigManager.disableItemCharger.Value) itemCharger = Object.FindObjectOfType<ItemCharger>();
-            if (ConfigManager.disableTerminal.Value) terminal = Object.FindObjectOfType<Terminal>();
-            if (ConfigManager.disableShipTeleporters.Value)
-            {
-                shipTeleporter = Object.FindObjectsOfType<ShipTeleporter>().FirstOrDefault(t => !t.isInverseTeleporter);
-                inverseShipTeleporter = Object.FindObjectsOfType<ShipTeleporter>().FirstOrDefault(t => t.isInverseTeleporter);
-            }
+            shipTeleporter = Object.FindObjectsOfType<ShipTeleporter>().FirstOrDefault(t => !t.isInverseTeleporter);
+            inverseShipTeleporter = Object.FindObjectsOfType<ShipTeleporter>().FirstOrDefault(t => t.isInverseTeleporter);
         }
+    }
 
-        [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.ShipLeave))]
-        [HarmonyPostfix]
-        private static void ShipLeave()
-            => EndGame();
+    [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.ShipLeave))]
+    [HarmonyPostfix]
+    private static void ShipLeave()
+        => ChargeShip();
 
-        [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.ShipLeaveAutomatically))]
-        [HarmonyPostfix]
-        private static void ShipLeaveAutomatically()
-            => EndGame();
+    [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.ShipLeaveAutomatically))]
+    [HarmonyPostfix]
+    private static void ShipLeaveAutomatically()
+        => ChargeShip();
 
-        public static void EndGame()
-        {
-            ShipLightsPatch.hasBeenAbsorbed = false;
-            EnablesShipFunctionalities(true);
-        }
+    public static void ChargeShip()
+    {
+        ShipLightsPatch.hasBeenAbsorbed = false;
+        EnablesShipFunctionalities(true);
+    }
 
-        public static void EnablesShipFunctionalities(bool enable)
-        {
-            EnablesShipDoor(enable);
-            EnablesShipLever(enable);
-            EnablesItemCharger(enable);
-            EnablesTerminal(enable);
-            EnablesShipTeleporter(enable);
-            EnablesInverseShipTeleporter(enable);
-        }
+    public static void EnablesShipFunctionalities(bool enable)
+    {
+        EnablesShipDoor(enable);
+        EnablesShipLever(enable);
+        EnablesItemCharger(enable);
+        EnablesTerminal(enable);
+        EnablesShipTeleporter(enable);
+        EnablesInverseShipTeleporter(enable);
+    }
 
-        public static void EnablesShipDoor(bool enable)
-        {
-            if (!ConfigManager.disableShipDoor.Value) return;
-            
-            shipDoor ??= Object.FindObjectOfType<HangarShipDoor>();
-            if (shipDoor == null) return;
+    public static void EnablesShipDoor(bool enable)
+    {
+        if (!ConfigManager.disableShipDoor.Value) return;
 
-            shipDoor.hydraulicsScreenDisplayed = enable;
-            shipDoor.hydraulicsDisplay.SetActive(enable);
-            shipDoor.SetDoorButtonsEnabled(enable);
-            StartOfRound.Instance.shipDoorsAnimator.SetBool("Closed", value: enable);
-            if (!enable) shipDoor.SetDoorOpen();
-        }
+        shipDoor ??= Object.FindObjectOfType<HangarShipDoor>();
+        if (shipDoor == null) return;
 
-        public static void EnablesShipLever(bool enable)
-        {
-            if (!ConfigManager.disableShipLever.Value) return;
+        shipDoor.hydraulicsScreenDisplayed = enable;
+        shipDoor.hydraulicsDisplay.SetActive(enable);
+        shipDoor.SetDoorButtonsEnabled(enable);
+        if (!enable) StartOfRound.Instance.shipDoorsAnimator.SetBool("Closed", value: enable);
+        if (!enable) shipDoor.SetDoorOpen();
+    }
 
-            shipLever ??= Object.FindObjectOfType<StartMatchLever>();
-            if (shipLever == null) return;
+    public static void EnablesShipLever(bool enable)
+    {
+        if (!ConfigManager.disableShipLever.Value) return;
 
-            if (!enable) shipLever.triggerScript.disabledHoverTip = Constants.MESSAGE_SHIP_ENERGY;
-            else shipLever.triggerScript.disabledHoverTip = Constants.MESSAGE_DEFAULT_SHIP_LEVER;
-            shipLever.triggerScript.interactable = enable;
-        }
+        shipLever ??= Object.FindObjectOfType<StartMatchLever>();
+        if (shipLever == null) return;
 
-        public static void EnablesItemCharger(bool enable)
-        {
-            if (!ConfigManager.disableItemCharger.Value) return;
+        shipLever.triggerScript.disabledHoverTip = enable ? Constants.MESSAGE_DEFAULT_SHIP_LEVER : Constants.MESSAGE_NO_SHIP_ENERGY;
+        shipLever.triggerScript.interactable = enable;
+    }
 
-            itemCharger ??= Object.FindObjectOfType<ItemCharger>();
-            if (itemCharger == null) return;
+    public static void EnablesItemCharger(bool enable)
+    {
+        if (!ConfigManager.disableItemCharger.Value) return;
 
-            if (!enable) itemCharger.triggerScript.disabledHoverTip = Constants.MESSAGE_SHIP_ENERGY;
-            else itemCharger.triggerScript.disabledHoverTip = Constants.MESSAGE_DEFAULT_ITEM_CHARGER;
-            itemCharger.triggerScript.interactable = enable;
-        }
+        itemCharger ??= Object.FindObjectOfType<ItemCharger>();
+        if (itemCharger == null) return;
 
-        public static void EnablesTerminal(bool enable)
-        {
-            if (!ConfigManager.disableTerminal.Value) return;
+        itemCharger.triggerScript.disabledHoverTip = enable ? Constants.MESSAGE_DEFAULT_ITEM_CHARGER : Constants.MESSAGE_NO_SHIP_ENERGY;
+        itemCharger.triggerScript.interactable = enable;
+    }
 
-            terminal ??= Object.FindObjectOfType<Terminal>();
-            if (terminal == null) return;
+    public static void EnablesTerminal(bool enable)
+    {
+        if (!ConfigManager.disableTerminal.Value) return;
 
-            if (!enable) terminal.terminalTrigger.disabledHoverTip = Constants.MESSAGE_SHIP_ENERGY;
-            terminal.terminalTrigger.interactable = enable;
-        }
+        terminal ??= Object.FindObjectOfType<Terminal>();
+        if (terminal == null) return;
 
-        public static void EnablesShipTeleporter(bool enable)
-        {
-            if (!ConfigManager.disableShipTeleporters.Value) return;
+        if (!enable) terminal.terminalTrigger.disabledHoverTip = Constants.MESSAGE_NO_SHIP_ENERGY;
+        terminal.terminalTrigger.interactable = enable;
+    }
 
-            shipTeleporter ??= Object.FindObjectsOfType<ShipTeleporter>().FirstOrDefault(t => !t.isInverseTeleporter);
-            if (shipTeleporter == null) return;
+    public static void EnablesShipTeleporter(bool enable)
+    {
+        if (!ConfigManager.disableShipTeleporters.Value) return;
 
-            if (!enable) shipTeleporter.buttonTrigger.disabledHoverTip = Constants.MESSAGE_SHIP_ENERGY;
-            shipTeleporter.buttonTrigger.interactable = enable;
-        }
+        shipTeleporter ??= Object.FindObjectsOfType<ShipTeleporter>().FirstOrDefault(t => !t.isInverseTeleporter);
+        if (shipTeleporter == null) return;
 
-        public static void EnablesInverseShipTeleporter(bool enable)
-        {
-            if (!ConfigManager.disableShipTeleporters.Value) return;
-            
-            inverseShipTeleporter ??= Object.FindObjectsOfType<ShipTeleporter>().FirstOrDefault(t => t.isInverseTeleporter);
-            if (inverseShipTeleporter == null) return;
+        if (!enable) shipTeleporter.buttonTrigger.disabledHoverTip = Constants.MESSAGE_NO_SHIP_ENERGY;
+        shipTeleporter.buttonTrigger.interactable = enable;
+    }
 
-            if (!enable) inverseShipTeleporter.buttonTrigger.disabledHoverTip = Constants.MESSAGE_SHIP_ENERGY;
-            inverseShipTeleporter.buttonTrigger.interactable = enable;
-        }
+    public static void EnablesInverseShipTeleporter(bool enable)
+    {
+        if (!ConfigManager.disableShipTeleporters.Value) return;
+
+        inverseShipTeleporter ??= Object.FindObjectsOfType<ShipTeleporter>().FirstOrDefault(t => t.isInverseTeleporter);
+        if (inverseShipTeleporter == null) return;
+
+        if (!enable) inverseShipTeleporter.buttonTrigger.disabledHoverTip = Constants.MESSAGE_NO_SHIP_ENERGY;
+        inverseShipTeleporter.buttonTrigger.interactable = enable;
     }
 }

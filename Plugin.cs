@@ -3,6 +3,7 @@ using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
 using LethalLib.Modules;
+using LightEater.Behaviours;
 using LightEater.Managers;
 using LightEater.Patches;
 using System;
@@ -18,12 +19,15 @@ public class LightEater : BaseUnityPlugin
 {
     private const string modGUID = "Lega.LightEater";
     private const string modName = "Light Eater";
-    private const string modVersion = "1.0.4";
+    private const string modVersion = "1.0.5";
 
     private readonly Harmony harmony = new Harmony(modGUID);
     private static readonly AssetBundle bundle = AssetBundle.LoadFromFile(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "lighteater"));
     internal static ManualLogSource mls;
     public static ConfigFile configFile;
+
+    // Items
+    public static GameObject deluminatorObj;
 
     public static bool isSellBodies = false;
 
@@ -42,6 +46,7 @@ public class LightEater : BaseUnityPlugin
 
         NetcodePatcher();
         LoadEnemies();
+        LoadItems();
 
         harmony.PatchAll(typeof(StartOfRoundPatch));
         harmony.PatchAll(typeof(RoundManagerPatch));
@@ -84,6 +89,26 @@ public class LightEater : BaseUnityPlugin
             Levels.LevelTypes.All,
             bundle.LoadAsset<TerminalNode>("Assets/LightEater/LightEaterTN.asset"),
             bundle.LoadAsset<TerminalKeyword>("Assets/LightEater/LightEaterTK.asset"));
+    }
+
+    public void LoadItems()
+        => deluminatorObj = RegisterItem(typeof(Deluminator), bundle.LoadAsset<Item>("Assets/Deluminator/DeluminatorItem.asset")).spawnPrefab;
+
+    public Item RegisterItem(Type type, Item item)
+    {
+        if (item.spawnPrefab.GetComponent(type) == null)
+        {
+            PhysicsProp script = item.spawnPrefab.AddComponent(type) as PhysicsProp;
+            script.grabbable = true;
+            script.grabbableToEnemies = true;
+            script.itemProperties = item;
+        }
+
+        NetworkPrefabs.RegisterNetworkPrefab(item.spawnPrefab);
+        Utilities.FixMixerGroups(item.spawnPrefab);
+        Items.RegisterItem(item);
+
+        return item;
     }
 
     public static void PatchOtherMods()

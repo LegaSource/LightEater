@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 
-namespace LightEater.Behaviours.LightSystem;
+namespace LightEater.Behaviours.LightSystem.Interfaces;
 
 public interface ILightSource
 {

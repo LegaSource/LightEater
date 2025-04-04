@@ -11,6 +11,8 @@ public class Constants
     public const string LIGHT_EATER = "Light Eater";
     public const string OLD_BIRD_NAME = "RadMech";
     // Messages
+    public const string IMPOSSIBLE_ACTION = "Impossible Action";
+    public const string MESSAGE_INFO_NO_LIGHT = "No targeted light";
     public const string MESSAGE_RECHARGE_SHIP_ENERGY = "Recharge ship's energy";
     public const string MESSAGE_NO_SHIP_ENERGY = "Not enough energy left...";
     public const string MESSAGE_DEFAULT_ITEM_CHARGER = "(Requires battery-powered item)";

@@ -1,25 +1,25 @@
-﻿using LightEater.Managers;
+﻿using LightEater.Behaviours.LightSystem.Interfaces;
 using UnityEngine;
 
-namespace LightEater.Behaviours.LightSystem;
+namespace LightEater.Behaviours.LightSystem.Handlers;
 
-public class TurretHandler(LightEaterAI lightEater, Turret turret) : ILightSource
+public class TurretHandler : ILightSource
 {
-    private readonly LightEaterAI lightEater = lightEater;
-    private readonly Turret turret = turret;
+    protected readonly Turret turret;
 
-    public void HandleLightInitialization(ref float absorbDuration) { }
+    protected TurretHandler(Turret turret)
+        => this.turret = turret;
 
-    public bool HandleLightConsumption(float absorbDuration, float timePassed)
+    public virtual void HandleLightInitialization(ref float absorbDuration) { }
+
+    public virtual bool HandleLightConsumption(float absorbDuration, float timePassed)
     {
         turret.SwitchTurretMode((int)TurretMode.Berserk);
         return true;
     }
 
-    public void HandleLightDepletion()
+    public virtual void HandleLightDepletion()
     {
-        lightEater.currentCharge += ConfigManager.turretCharge.Value;
-
         turret.ToggleTurretEnabledLocalClient(false);
         turret.mainAudio.Stop();
         turret.farAudio.Stop();
@@ -32,9 +32,9 @@ public class TurretHandler(LightEaterAI lightEater, Turret turret) : ILightSourc
         _ = LightEater.turrets.Remove(turret);
     }
 
-    public Vector3 GetClosestNodePosition()
-        => lightEater.ChooseClosestNodeToPosition(lightEater.closestLightSource.transform.position).position;
+    public virtual Vector3 GetClosestNodePosition()
+        => turret.transform.position;
 
-    public Vector3 GetClosestLightPosition()
+    public virtual Vector3 GetClosestLightPosition()
         => turret.transform.position;
 }

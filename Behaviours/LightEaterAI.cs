@@ -1,5 +1,6 @@
 ﻿using GameNetcodeStuff;
-using LightEater.Behaviours.LightSystem;
+using LightEater.Behaviours.LightSystem.Factories;
+using LightEater.Behaviours.LightSystem.Interfaces;
 using LightEater.Managers;
 using LightEater.Patches;
 using System;
@@ -14,7 +15,8 @@ namespace LightEater.Behaviours;
 
 public class LightEaterAI : EnemyAI
 {
-    public int currentCharge = 0; // Server side
+    public LightEnergyNetworkManager energyNetwork;
+
     public bool isShocked = false; // Server side
 
     public Transform TurnCompass;
@@ -29,11 +31,8 @@ public class LightEaterAI : EnemyAI
     public List<EntranceTeleport> entrances;
 
     public int absorbDistance = 5;
-    public GameObject closestLightSource;
     private float explodeTimer = 0f;
-    public bool absorbPlayerObject = false;
 
-    public Coroutine absorbCoroutine;
     public Coroutine stunCoroutine;
     public Coroutine attackCoroutine;
     public Coroutine killCoroutine;
@@ -50,8 +49,8 @@ public class LightEaterAI : EnemyAI
     {
         base.Start();
 
+        energyNetwork.PlayAbsorptionSound = PlayAbsorptionSound;
         enemyType.canDie = false;
-
         currentBehaviourStateIndex = (int)State.WANDERING;
         creatureAnimator.SetTrigger("startWalk");
         StartSearch(transform.position);
@@ -117,13 +116,13 @@ public class LightEaterAI : EnemyAI
         agent.speed = 2f;
         if (FoundClosestPlayerInRange(25, 10))
         {
-            closestLightSource = null;
+            energyNetwork.closestLightSource = null;
             StopSearch(currentSearch);
             DoAnimationClientRpc("startRun");
             SwitchToBehaviourClientRpc((int)State.CHASING);
             return;
         }
-        if (currentCharge > 200 || FoundLightSource())
+        if (energyNetwork.currentCharge > 200 || FoundLightSource())
         {
             StopSearch(currentSearch);
             DoAnimationClientRpc("startRun");
@@ -147,7 +146,7 @@ public class LightEaterAI : EnemyAI
         if (TimeOfDay.Instance.hour >= ConfigManager.shipMinHour.Value && !ShipLightsPatch.hasBeenAbsorbed)
         {
             absorbDistance = 20;
-            closestLightSource = StartOfRound.Instance.shipRoomLights.gameObject;
+            energyNetwork.closestLightSource = StartOfRound.Instance.shipRoomLights.gameObject;
         }
         else if (LightEater.enemies.Any(r => !r.isEnemyDead))
         {
@@ -158,7 +157,7 @@ public class LightEaterAI : EnemyAI
                 .FirstOrDefault(e => e.EnemyName.Equals(closestEnemy.enemyType.enemyName))?
                 .AbsorbDistance
                     ?? 5;
-            closestLightSource = closestEnemy.gameObject;
+            energyNetwork.closestLightSource = closestEnemy.gameObject;
         }
         else
         {
@@ -166,7 +165,7 @@ public class LightEaterAI : EnemyAI
             if (!isOutside)
             {
                 path1 = new NavMeshPath();
-                closestLightSource = RoundManager.Instance.allPoweredLightsAnimators
+                energyNetwork.closestLightSource = RoundManager.Instance.allPoweredLightsAnimators
                     .Where(l => l != null && agent.CalculatePath(ChooseClosestNodeToPosition(l.transform.position).position, path1))
                     .OrderBy(l => Vector3.Distance(transform.position, l.transform.position))
                     .FirstOrDefault()?
@@ -174,13 +173,13 @@ public class LightEaterAI : EnemyAI
             }
             else
             {
-                closestLightSource = RoundManager.Instance.allPoweredLightsAnimators
+                energyNetwork.closestLightSource = RoundManager.Instance.allPoweredLightsAnimators
                     .OrderBy(l => l ? Vector3.Distance(GetEntranceExitPosition(GetClosestEntrance()), l.transform.position) : float.MaxValue)
                     .FirstOrDefault()?
                     .gameObject;
             }
         }
-        return closestLightSource != null;
+        return energyNetwork.closestLightSource != null;
     }
 
     public void DoHunting()
@@ -188,7 +187,7 @@ public class LightEaterAI : EnemyAI
         agent.speed = ConfigManager.huntingSpeed.Value;
         if (FoundClosestPlayerInRange(25, 10))
         {
-            closestLightSource = null;
+            energyNetwork.closestLightSource = null;
             SwitchToBehaviourClientRpc((int)State.CHASING);
             return;
         }
@@ -203,7 +202,7 @@ public class LightEaterAI : EnemyAI
 
     public bool HuntPlayers()
     {
-        if (currentCharge <= 200 && closestLightSource != null) return false;
+        if (energyNetwork.currentCharge <= 200 && energyNetwork.closestLightSource != null) return false;
 
         PlayerControllerB closestPlayer = StartOfRound.Instance.allPlayerScripts
             .Where(p => p.isPlayerControlled && !p.isPlayerDead)
@@ -223,7 +222,7 @@ public class LightEaterAI : EnemyAI
     public bool CloseToLightSource()
     {
         _ = CrossingLight();
-        object lightSource = DetermineLightSource();
+        object lightSource = LightEnergyManager.DetermineLightSource(energyNetwork.closestLightSource);
 
         if ((lightSource is ShipLights && !isOutside)
             || (lightSource is EnemyAI enemy && enemy.isOutside != isOutside)
@@ -243,88 +242,18 @@ public class LightEaterAI : EnemyAI
     public void DoAbsorbing()
     {
         agent.speed = 0f;
-        if (closestLightSource == null)
+        if (energyNetwork.closestLightSource == null)
         {
             StartSearch(transform.position);
             DoAnimationClientRpc("startWalk");
             SwitchToBehaviourClientRpc((int)State.WANDERING);
             return;
         }
-        AbsorbLight();
+        energyNetwork.AbsorbLight(energyNetwork.closestLightSource, 5);
     }
 
-    public void AbsorbLight()
-    {
-        if (absorbCoroutine != null) return;
-
-        NetworkObject networkObject = closestLightSource.GetComponent<NetworkObject>();
-        if (networkObject != null) AbsorbLightClientRpc(networkObject);
-        else AbsorbLightClientRpc(closestLightSource.name, closestLightSource.transform.position);
-    }
-
-    [ClientRpc]
-    public void AbsorbLightClientRpc(NetworkObjectReference obj)
-    {
-        if (!obj.TryGet(out NetworkObject networkObject)) return;
-
-        closestLightSource = networkObject.gameObject;
-        absorbCoroutine ??= StartCoroutine(AbsorbLightCoroutine());
-    }
-
-    // Si aucun NetworkObject
-    [ClientRpc]
-    public void AbsorbLightClientRpc(string objectName, Vector3 position)
-    {
-        closestLightSource = objectName switch
-        {
-            Constants.SHIP_LIGHTS => StartOfRound.Instance.shipRoomLights.gameObject,
-            Constants.TURRET => LightEater.turrets
-                .OrderBy(t => t != null ? Vector3.Distance(position, t.transform.position) : float.MaxValue)
-                .FirstOrDefault()
-                .gameObject,
-            Constants.LANDMINE => LightEater.landmines
-                .OrderBy(l => l != null ? Vector3.Distance(position, l.transform.position) : float.MaxValue)
-                .FirstOrDefault()
-                .gameObject,
-            _ => RoundManager.Instance.allPoweredLightsAnimators
-                .OrderBy(l => l != null ? Vector3.Distance(position, l.transform.position) : float.MaxValue)
-                .FirstOrDefault()
-                .gameObject,
-        };
-        absorbCoroutine ??= StartCoroutine(AbsorbLightCoroutine());
-    }
-
-    public IEnumerator AbsorbLightCoroutine()
-    {
-        object lightSource = DetermineLightSource();
-        ILightSource lightHandler = LightSourceFactory.GetLightHandler(lightSource, this);
-        if (lightHandler == null) yield break;
-
-        bool isAbsorbed = true;
-        float absorbDuration = 5f;
-        float timePassed = 0f;
-
-        creatureSFX.PlayOneShot(AbsorptionSound);
-        lightHandler.HandleLightInitialization(ref absorbDuration);
-
-        while (timePassed < absorbDuration)
-        {
-            yield return new WaitForSeconds(0.5f);
-            timePassed += 0.5f;
-
-            if (!lightHandler.HandleLightConsumption(absorbDuration, timePassed))
-            {
-                isAbsorbed = false;
-                break;
-            }
-        }
-
-        if (lightSource is FlashlightItem flashlight) flashlight.flashlightInterferenceLevel = 0;
-        if (isAbsorbed) lightHandler.HandleLightDepletion();
-
-        closestLightSource = null;
-        absorbCoroutine = null;
-    }
+    public void PlayAbsorptionSound()
+        => creatureSFX.PlayOneShot(AbsorptionSound);
 
     public void DoChasing()
     {
@@ -383,18 +312,18 @@ public class LightEaterAI : EnemyAI
 
     public bool StunExplosion()
     {
-        if (currentCharge < 100 || explodeTimer < 10f) return false;
+        if (energyNetwork.currentCharge < 100 || explodeTimer < 10f) return false;
         if (!targetPlayer.HasLineOfSightToPosition(eye.position, 60f, 15)) return false;
 
         agent.speed = 0f;
 
-        if (currentCharge > 200)
+        if (energyNetwork.currentCharge > 200)
         {
             StunEnemyClientRpc();
             return true;
         }
 
-        currentCharge -= 100;
+        energyNetwork.currentCharge -= 100;
         explodeTimer = 0f;
 
         StunExplosionClientRpc();
@@ -415,7 +344,7 @@ public class LightEaterAI : EnemyAI
 
         if (killCoroutine == null)
         {
-            currentCharge = 200;
+            energyNetwork.currentCharge = 200;
             creatureAnimator.SetTrigger("startRun");
             enemyType.canDie = false;
             stunCoroutine = null;
@@ -477,7 +406,7 @@ public class LightEaterAI : EnemyAI
             .FirstOrDefault(l => l != null && Vector3.Distance(transform.position, l.transform.position) <= 10f)?
             .gameObject
             ?? LightEater.grabbableObjects
-                .FirstOrDefault(g => CanBeAbsorbed(g, 10f))?
+                .FirstOrDefault(g => LightEnergyManager.CanBeAbsorbed(g, transform.position, 10f))?
                 .gameObject
             ?? LightEater.turrets
                 .FirstOrDefault(t => t != null && t.turretActive && Vector3.Distance(transform.position, t.transform.position) <= 10f)?
@@ -489,38 +418,11 @@ public class LightEaterAI : EnemyAI
         if (crossedLight != null)
         {
             absorbDistance = 5;
-            closestLightSource = crossedLight;
+            energyNetwork.closestLightSource = crossedLight;
         }
 
-        return closestLightSource != null;
+        return energyNetwork.closestLightSource != null;
     }
-
-    public bool CanBeAbsorbed(GrabbableObject grabbableObject, float distance)
-        => grabbableObject != null
-            && grabbableObject.itemProperties.requiresBattery
-            && grabbableObject.insertedBattery != null && grabbableObject.insertedBattery.charge > 0f
-            && (grabbableObject is not PatcherTool patcherTool || !patcherTool.isShocking)
-            && IsObjectClose(grabbableObject, distance);
-
-    public bool IsObjectClose(GrabbableObject grabbableObject, float distance)
-    {
-        if (Vector3.Distance(transform.position, grabbableObject.transform.position) <= distance) return true;
-
-        foreach (BeltBagItem beltBag in LightEater.beltBags)
-        {
-            if (beltBag == null || Vector3.Distance(transform.position, beltBag.transform.position) > distance) continue;
-            if (beltBag.objectsInBag.FirstOrDefault(o => o == grabbableObject) != null) return true;
-        }
-        return false;
-    }
-
-    public object DetermineLightSource()
-        => closestLightSource.GetComponentInParent<ShipLights>() is ShipLights shipLights
-            ? shipLights : closestLightSource.TryGetComponent(out GrabbableObject grabbableObject)
-            ? grabbableObject : closestLightSource.GetComponentInParent<Turret>() is Turret turret
-            ? turret : closestLightSource.GetComponentInParent<Landmine>() is Landmine landmine
-            ? landmine : closestLightSource.GetComponentInParent<EnemyAI>() is EnemyAI enemy
-            ? enemy : RoundManager.Instance.allPoweredLightsAnimators.FirstOrDefault(l => l?.gameObject == closestLightSource);
 
     public void GoTowardsEntrance()
     {
@@ -565,7 +467,7 @@ public class LightEaterAI : EnemyAI
     [ServerRpc(RequireOwnership = false)]
     public void ShockEnemyServerRpc(int charge)
     {
-        currentCharge += charge;
+        energyNetwork.currentCharge += charge;
         isShocked = false;
     }
 

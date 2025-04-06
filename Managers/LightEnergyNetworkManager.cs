@@ -1,4 +1,6 @@
-﻿using LightEater.Behaviours.LightSystem.Factories;
+﻿using GameNetcodeStuff;
+using LightEater.Behaviours;
+using LightEater.Behaviours.LightSystem.Factories;
 using LightEater.Behaviours.LightSystem.Interfaces;
 using System;
 using System.Collections;
@@ -139,10 +141,14 @@ public class LightEnergyNetworkManager : NetworkBehaviour
 
         if (showMsg)
         {
-            if (currentActionType == (int)LightActionType.Absorb)
-                HUDManager.Instance.DisplayTip(Constants.INFORMATION, Constants.MESSAGE_INFO_ABSORPTION_CANCELED);
-            else
-                HUDManager.Instance.DisplayTip(Constants.INFORMATION, Constants.MESSAGE_INFO_RELEASE_CANCELED);
+            PlayerControllerB player = GetComponentInParent<Deluminator>()?.playerHeldBy;
+            if (player != null && GameNetworkManager.Instance.localPlayerController == player)
+            {
+                if (currentActionType == (int)LightActionType.Absorb)
+                    HUDManager.Instance.DisplayTip(Constants.INFORMATION, Constants.MESSAGE_INFO_ABSORPTION_CANCELED);
+                else
+                    HUDManager.Instance.DisplayTip(Constants.INFORMATION, Constants.MESSAGE_INFO_RELEASE_CANCELED);
+            }
         }
     }
 }

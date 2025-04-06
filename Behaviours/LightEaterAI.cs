@@ -321,6 +321,7 @@ public class LightEaterAI : EnemyAI
 
     public bool StunExplosion()
     {
+        if (isShocked) return false;
         if (energyNetwork.currentCharge < 100 || explodeTimer < 10f) return false;
         if (!targetPlayer.HasLineOfSightToPosition(eye.position, 60f, 15)) return false;
 
@@ -502,11 +503,11 @@ public class LightEaterAI : EnemyAI
 
         yield return new WaitForSeconds(4f);
 
-        base.KillEnemy(destroy);
-        Landmine.SpawnExplosion(transform.position + Vector3.up, spawnExplosionEffect: true, 6f, 6.3f);
-
         energyNetwork.StopHandleLightCoroutine(false);
         if (IsServer || IsHost) SpawnDeluminator(LightEater.deluminatorObj, transform.position + (Vector3.up * 0.5f));
+
+        base.KillEnemy(destroy);
+        Landmine.SpawnExplosion(transform.position + Vector3.up, spawnExplosionEffect: true, 6f, 6.3f);
     }
 
     public void SpawnDeluminator(GameObject spawnPrefab, Vector3 position)

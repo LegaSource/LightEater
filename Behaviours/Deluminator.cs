@@ -39,7 +39,7 @@ public class Deluminator : PhysicsProp
     public override void DiscardItem()
     {
         base.DiscardItem();
-        energyNetwork.StopHandleLightCoroutine(true);
+        energyNetwork.StopCoroutineServerRpc(true);
     }
 
     public override void ItemActivate(bool used, bool buttonDown = true)
@@ -105,7 +105,10 @@ public class Deluminator : PhysicsProp
         => ActionAudio.Stop();
 
     public void ResetAction()
-        => SetControlTipsForItem();
+    {
+        if (playerHeldBy == null || GameNetworkManager.Instance.localPlayerController != playerHeldBy) return;
+        SetControlTipsForItem();
+    }
 
     public override void SetControlTipsForItem()
     {

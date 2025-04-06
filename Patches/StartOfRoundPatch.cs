@@ -1,4 +1,5 @@
 ﻿using HarmonyLib;
+using LightEater.Behaviours;
 using LightEater.Managers;
 using System.Linq;
 using UnityEngine;
@@ -32,15 +33,13 @@ internal class StartOfRoundPatch
     [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.ShipLeave))]
     [HarmonyPostfix]
     private static void ShipLeave()
-        => ChargeShip();
+        => EndGame();
 
-    [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.ShipLeaveAutomatically))]
-    [HarmonyPostfix]
-    private static void ShipLeaveAutomatically()
-        => ChargeShip();
-
-    public static void ChargeShip()
+    public static void EndGame()
     {
+        foreach (Deluminator deluminator in Object.FindObjectsOfType<Deluminator>()) deluminator.energyNetwork.StopHandleLightCoroutine(false);
+        foreach (LightEaterAI lightEater in Object.FindObjectsOfType<LightEaterAI>()) lightEater.energyNetwork.StopHandleLightCoroutine(false);
+
         ShipLightsPatch.hasBeenAbsorbed = false;
         EnablesShipFunctionalities(true);
     }

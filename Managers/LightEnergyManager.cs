@@ -10,9 +10,9 @@ namespace LightEater.Managers;
 public class LightEnergyManager
 {
     public static Dictionary<Animator, bool> poweredLights = [];
-    public static Dictionary<EnemyAI, bool> enemies = [];
     public static Dictionary<Turret, bool> turrets = [];
     public static Dictionary<Landmine, bool> landmines = [];
+    public static HashSet<EnemyAI> enemies = [];
     public static HashSet<GrabbableObject> grabbableObjects = [];
     public static HashSet<BeltBagItem> beltBags = [];
 
@@ -26,9 +26,9 @@ public class LightEnergyManager
     {
         if (string.IsNullOrEmpty(enemy.enemyType?.enemyName)) return;
         if (!ConfigManager.enemiesValues.Select(e => e.EnemyName).Contains(enemy.enemyType.enemyName)) return;
-        if (enemies.ContainsKey(enemy)) return;
+        if (enemies.Contains(enemy)) return;
 
-        enemies.Add(enemy, true);
+        _ = enemies.Add(enemy);
     }
 
     public static void ResetTurrets()
@@ -97,9 +97,6 @@ public class LightEnergyManager
         _ = beltBags.Add(beltBag);
     }
 
-    public static List<EnemyAI> GetEnemies(bool value)
-        => enemies.Where(e => e.Value == value).Select(e => e.Key).ToList();
-
     public static List<Turret> GetTurrets(bool value)
         => turrets.Where(t => t.Value == value).Select(t => t.Key).ToList();
 
@@ -108,9 +105,6 @@ public class LightEnergyManager
 
     public static List<Animator> GetPoweredLights(bool value)
         => poweredLights.Where(p => p.Value == value).Select(p => p.Key).ToList();
-
-    public static void SetEnemyValue(EnemyAI enemy, bool value)
-        => enemies[enemy] = value;
 
     public static void SetTurretValue(Turret turret, bool value)
         => turrets[turret] = value;
@@ -150,7 +144,7 @@ public class LightEnergyManager
         RaycastHit[] hits = Physics.SphereCastAll(ray, 2f, 5f);
         foreach (RaycastHit hit in hits)
         {
-            GameObject lightSource = GetEnemies(enable).FirstOrDefault(e => e == hit.collider.GetComponent<EnemyAI>())?.gameObject
+            GameObject lightSource = enemies.FirstOrDefault(e => e == hit.collider.GetComponent<EnemyAI>())?.gameObject
                 ?? grabbableObjects.FirstOrDefault(o => CanBeTransferred(o, enable) && o == hit.collider.GetComponent<GrabbableObject>())?.gameObject
                 ?? GetTurrets(enable).FirstOrDefault(o => o == hit.collider.GetComponent<Turret>())?.gameObject
                 ?? GetLandmines(enable).FirstOrDefault(o => o == hit.collider.GetComponent<Landmine>())?.gameObject

@@ -30,7 +30,7 @@ public class EnemyHandler : ILightSource
     {
         if (!GameNetworkManager.Instance.localPlayerController.IsHost && !GameNetworkManager.Instance.localPlayerController.IsServer) return;
 
-        LightEnergyManager.SetEnemyValue(enemy, false);
+        _ = LightEnergyManager.enemies.Remove(enemy);
 
         if (enemy.isEnemyDead) return;
 
@@ -48,6 +48,8 @@ public class EnemyHandler : ILightSource
     public virtual bool HandleLightInjection(float releaseDuration, float remainingDuration, float timePassed) => false;
 
     public virtual void HandleLightRestoration() { }
+
+    public virtual void HandleInterruptAction() { }
 
     public virtual Vector3 GetClosestNodePosition()
         => enemy.transform.position;

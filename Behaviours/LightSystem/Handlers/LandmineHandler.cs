@@ -29,6 +29,8 @@ public class LandmineHandler : ILightSource
         LightEnergyManager.SetLandmineValue(landmine, true);
     }
 
+    public virtual void HandleInterruptAction() { }
+
     public virtual Vector3 GetClosestNodePosition()
         => landmine.transform.position;
 

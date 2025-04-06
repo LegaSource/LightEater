@@ -7,6 +7,7 @@ using LightEater.Behaviours;
 using LightEater.Managers;
 using LightEater.Patches;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
@@ -77,9 +78,11 @@ public class LightEater : BaseUnityPlugin
     {
         EnemyType lightEaterEnemy = bundle.LoadAsset<EnemyType>("Assets/LightEater/LightEaterEnemy.asset");
         NetworkPrefabs.RegisterNetworkPrefab(lightEaterEnemy.enemyPrefab);
+
+        (Dictionary<Levels.LevelTypes, int> spawnRateByLevelType, Dictionary<string, int> spawnRateByCustomLevelType) = ConfigManager.GetEnemiesSpawns();
         Enemies.RegisterEnemy(lightEaterEnemy,
-            ConfigManager.rarity.Value,
-            Levels.LevelTypes.All,
+            spawnRateByLevelType,
+            spawnRateByCustomLevelType,
             bundle.LoadAsset<TerminalNode>("Assets/LightEater/LightEaterTN.asset"),
             bundle.LoadAsset<TerminalKeyword>("Assets/LightEater/LightEaterTK.asset"));
     }

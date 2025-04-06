@@ -9,6 +9,7 @@ public interface ILightSource
     public void HandleLightDepletion();
     public bool HandleLightInjection(float releaseDuration, float remainingDuration, float timePassed);
     public void HandleLightRestoration();
+    public void HandleInterruptAction();
     public Vector3 GetClosestNodePosition();
     public Vector3 GetClosestLightPosition();
 }

@@ -49,7 +49,9 @@ public class LightEaterAI : EnemyAI
     {
         base.Start();
 
-        energyNetwork.PlayAbsorptionSound = PlayAbsorptionSound;
+        energyNetwork.PlayActionSound = PlayAbsorptionSound;
+        energyNetwork.StopActionSound = StopAbsorptionSound;
+
         enemyType.canDie = false;
         currentBehaviourStateIndex = (int)State.WANDERING;
         creatureAnimator.SetTrigger("startWalk");
@@ -148,9 +150,9 @@ public class LightEaterAI : EnemyAI
             absorbDistance = 20;
             energyNetwork.closestLightSource = StartOfRound.Instance.shipRoomLights.gameObject;
         }
-        else if (LightEnergyManager.GetEnemies(true).Any(r => !r.isEnemyDead))
+        else if (LightEnergyManager.enemies.Any(r => !r.isEnemyDead))
         {
-            EnemyAI closestEnemy = LightEnergyManager.GetEnemies(true).Where(r => !r.isEnemyDead)
+            EnemyAI closestEnemy = LightEnergyManager.enemies.Where(r => !r.isEnemyDead)
                 .OrderBy(r => Vector3.Distance(transform.position, r.transform.position))
                 .FirstOrDefault();
             absorbDistance = ConfigManager.enemiesValues
@@ -242,18 +244,25 @@ public class LightEaterAI : EnemyAI
     public void DoAbsorbing()
     {
         agent.speed = 0f;
-        if (energyNetwork.closestLightSource == null)
+        if (energyNetwork.closestLightSource == null || !StartOfRound.Instance.shipHasLanded)
         {
             StartSearch(transform.position);
             DoAnimationClientRpc("startWalk");
             SwitchToBehaviourClientRpc((int)State.WANDERING);
             return;
         }
-        energyNetwork.AbsorbLight(energyNetwork.closestLightSource, 5);
+        energyNetwork.HandleLight(energyNetwork.closestLightSource, LightEnergyNetworkManager.LightActionType.Absorb);
     }
 
     public void PlayAbsorptionSound()
-        => creatureSFX.PlayOneShot(AbsorptionSound);
+    {
+        if (energyNetwork.totalDuration > 0f) creatureSFX.pitch = AbsorptionSound.length / energyNetwork.totalDuration;
+        creatureSFX.PlayOneShot(AbsorptionSound);
+        creatureSFX.pitch = 1f;
+    }
+
+    public void StopAbsorptionSound()
+        => creatureSFX.Stop();
 
     public void DoChasing()
     {
@@ -495,6 +504,18 @@ public class LightEaterAI : EnemyAI
 
         base.KillEnemy(destroy);
         Landmine.SpawnExplosion(transform.position + Vector3.up, spawnExplosionEffect: true, 6f, 6.3f);
+
+        energyNetwork.StopHandleLightCoroutine(false);
+        if (IsServer || IsHost) SpawnDeluminator(LightEater.deluminatorObj, transform.position + (Vector3.up * 0.5f));
+    }
+
+    public void SpawnDeluminator(GameObject spawnPrefab, Vector3 position)
+    {
+        GameObject gameObject = Instantiate(spawnPrefab, position, Quaternion.identity, StartOfRound.Instance.propsContainer);
+        GrabbableObject grabbableObject = gameObject.GetComponent<GrabbableObject>();
+        grabbableObject.fallTime = 0f;
+        grabbableObject.isInFactory = !isOutside;
+        gameObject.GetComponent<NetworkObject>().Spawn();
     }
 
     [ServerRpc(RequireOwnership = false)]

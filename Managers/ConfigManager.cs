@@ -1,6 +1,9 @@
 ﻿using BepInEx.Configuration;
+using LethalLib.Modules;
 using LightEater.Values;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace LightEater.Managers;
 
@@ -9,7 +12,7 @@ public class ConfigManager
     public static List<EnemyValue> enemiesValues = [];
 
     // GLOBAL
-    public static ConfigEntry<int> rarity;
+    public static ConfigEntry<string> spawnWeights;
     public static ConfigEntry<float> huntingSpeed;
     public static ConfigEntry<float> chasingSpeed;
     public static ConfigEntry<int> damage;
@@ -37,7 +40,7 @@ public class ConfigManager
     public static void Load()
     {
         // GLOBAL
-        rarity = LightEater.configFile.Bind(Constants.GLOBAL, "Rarity", 20, $"{Constants.LIGHT_EATER} rarity");
+        spawnWeights = LightEater.configFile.Bind(Constants.GLOBAL, "Spawn weights", "Vanilla:20,Modded:20", $"{Constants.LIGHT_EATER} spawn weights");
         huntingSpeed = LightEater.configFile.Bind(Constants.GLOBAL, "Hunting speed", 3f, $"{Constants.LIGHT_EATER} speed when it moves towards a light");
         chasingSpeed = LightEater.configFile.Bind(Constants.GLOBAL, "Chasing speed", 4f, $"{Constants.LIGHT_EATER} speed when it moves towards a player");
         damage = LightEater.configFile.Bind(Constants.GLOBAL, "Damage", 20, $"{Constants.LIGHT_EATER} damage");
@@ -61,6 +64,25 @@ public class ConfigManager
         minStrikeDuration = LightEater.configFile.Bind(Constants.STORM_INTERACTIONS, "Min strike duration", 7, "Minimum time interval before a new strike");
         maxStrikeDuration = LightEater.configFile.Bind(Constants.STORM_INTERACTIONS, "Max strike duration", 15, "Maximum time interval before a new strike");
         stormCharge = LightEater.configFile.Bind(Constants.STORM_INTERACTIONS, "Storm charge", 100, "Electrical charge received by lightning");
+    }
+
+    public static (Dictionary<Levels.LevelTypes, int> spawnRateByLevelType, Dictionary<string, int> spawnRateByCustomLevelType) GetEnemiesSpawns()
+    {
+        Dictionary<Levels.LevelTypes, int> spawnRateByLevelType = [];
+        Dictionary<string, int> spawnRateByCustomLevelType = [];
+        foreach (string spawnWeight in spawnWeights.Value.Split(',').Select(s => s.Trim()))
+        {
+            string[] values = spawnWeight.Split(':');
+            if (values.Length != 2) continue;
+
+            string name = values[0];
+            if (int.TryParse(values[1], out int spawnRate))
+            {
+                if (Enum.TryParse(name, ignoreCase: true, out Levels.LevelTypes levelType)) spawnRateByLevelType[levelType] = spawnRate;
+                else spawnRateByCustomLevelType[name] = spawnRate;
+            }
+        }
+        return (spawnRateByLevelType, spawnRateByCustomLevelType);
     }
 
     public static void GetEnemiesValues()

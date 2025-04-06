@@ -41,6 +41,8 @@ public class TurretHandler : ILightSource
         LightEnergyManager.SetTurretValue(turret, true);
     }
 
+    public virtual void HandleInterruptAction() { }
+
     public virtual Vector3 GetClosestNodePosition()
         => turret.transform.position;
 

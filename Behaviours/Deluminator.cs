@@ -1,13 +1,19 @@
 ﻿using LightEater.Managers;
+using UnityEngine;
 
 namespace LightEater.Behaviours;
 public class Deluminator : PhysicsProp
 {
     public LightEnergyNetworkManager energyNetwork;
 
+    public AudioSource ActionAudio;
+    public AudioClip ActionSound;
+
     public override void Start()
     {
         base.Start();
+        energyNetwork.PlayActionSound = PlayActionSound;
+        energyNetwork.StopActionSound = StopActionSound;
         energyNetwork.ResetAction = ResetAction;
     }
 
@@ -27,7 +33,13 @@ public class Deluminator : PhysicsProp
             playerHeldBy.equippedUsableItemQE = false;
         }
 
-        _ = StopCoroutines();
+        energyNetwork.StopCoroutineServerRpc(true);
+    }
+
+    public override void DiscardItem()
+    {
+        base.DiscardItem();
+        energyNetwork.StopHandleLightCoroutine(true);
     }
 
     public override void ItemActivate(bool used, bool buttonDown = true)
@@ -35,9 +47,7 @@ public class Deluminator : PhysicsProp
         base.ItemActivate(used, buttonDown);
 
         if (!buttonDown || playerHeldBy == null) return;
-        if (!StartEnergyTransfer(true)) return;
-
-        energyNetwork.AbsorbLight(energyNetwork.closestLightSource, 10);
+        StartEnergyTransfer(true);
     }
 
     public override void ItemInteractLeftRight(bool right)
@@ -45,49 +55,54 @@ public class Deluminator : PhysicsProp
         base.ItemInteractLeftRight(right);
 
         if (right || playerHeldBy == null) return;
-        if (!StartEnergyTransfer(false)) return;
-
-        energyNetwork.ReleaseLight(energyNetwork.closestLightSource, 5);
+        StartEnergyTransfer(false);
     }
 
-    public bool StartEnergyTransfer(bool enable)
+    public void StartEnergyTransfer(bool enable)
     {
         if (!StartOfRound.Instance.shipHasLanded)
         {
             HUDManager.Instance.DisplayTip(Constants.IMPOSSIBLE_ACTION, Constants.MESSAGE_INFO_WAIT_SHIP);
-            return false;
+            return;
         }
 
-        if (StopCoroutines()) return false;
+        if (energyNetwork.handleLightCoroutine != null)
+        {
+            energyNetwork.StopCoroutineServerRpc(true);
+            return;
+        }
+
+        if (enable && energyNetwork.currentCharge >= 200)
+        {
+            HUDManager.Instance.DisplayTip(Constants.IMPOSSIBLE_ACTION, Constants.MESSAGE_INFO_MAX_CHARGES);
+            return;
+        }
+        if (!enable && energyNetwork.currentCharge <= 0)
+        {
+            HUDManager.Instance.DisplayTip(Constants.IMPOSSIBLE_ACTION, Constants.MESSAGE_INFO_MIN_CHARGES);
+            return;
+        }
 
         energyNetwork.closestLightSource = LightEnergyManager.GetClosestLightSourceInView(this, enable);
         if (energyNetwork.closestLightSource == null)
         {
             HUDManager.Instance.DisplayTip(Constants.IMPOSSIBLE_ACTION, Constants.MESSAGE_INFO_NO_LIGHT);
-            return false;
+            return;
         }
 
-        return true;
+        energyNetwork.HandleLight(energyNetwork.closestLightSource,
+            enable ? LightEnergyNetworkManager.LightActionType.Absorb : LightEnergyNetworkManager.LightActionType.Release);
     }
 
-    public bool StopCoroutines()
+    public void PlayActionSound()
     {
-        if (energyNetwork.absorbCoroutine != null)
-        {
-            energyNetwork.StopCoroutine(energyNetwork.absorbCoroutine);
-            energyNetwork.absorbCoroutine = null;
-            HUDManager.Instance.DisplayTip(Constants.INFORMATION, Constants.MESSAGE_INFO_ABSORPTION_CANCELED);
-            return true;
-        }
-        if (energyNetwork.releaseCoroutine != null)
-        {
-            energyNetwork.StopCoroutine(energyNetwork.releaseCoroutine);
-            energyNetwork.releaseCoroutine = null;
-            HUDManager.Instance.DisplayTip(Constants.INFORMATION, Constants.MESSAGE_INFO_RELEASE_CANCELED);
-            return true;
-        }
-        return false;
+        if (energyNetwork.totalDuration > 0f) ActionAudio.pitch = ActionSound.length / energyNetwork.totalDuration;
+        ActionAudio.PlayOneShot(ActionSound);
+        ActionAudio.pitch = 1f;
     }
+
+    public void StopActionSound()
+        => ActionAudio.Stop();
 
     public void ResetAction()
         => SetControlTipsForItem();

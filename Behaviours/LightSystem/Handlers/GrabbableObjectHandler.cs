@@ -32,7 +32,12 @@ public class GrabbableObjectHandler : ILightSource
         return true;
     }
 
-    public virtual void HandleLightDepletion() { }
+    public virtual void HandleLightDepletion()
+    {
+        grabbableObject.insertedBattery = new Battery(true, 0f);
+        grabbableObject.ChargeBatteries();
+        grabbableObject.isBeingUsed = false;
+    }
 
     public virtual bool HandleLightInjection(float releaseDuration, float remainingDuration, float timePassed)
     {
@@ -40,7 +45,21 @@ public class GrabbableObjectHandler : ILightSource
         return true;
     }
 
-    public virtual void HandleLightRestoration() { }
+    public virtual void HandleLightRestoration()
+    {
+        grabbableObject.insertedBattery = new Battery(false, 1f);
+        grabbableObject.ChargeBatteries();
+        grabbableObject.isBeingUsed = false;
+    }
+
+    public virtual void HandleInterruptAction()
+    {
+        if (grabbableObject is FlashlightItem flashlight)
+        {
+            flashlight.flashlightInterferenceLevel = 0;
+            flashlight.SwitchFlashlight(on: false);
+        }
+    }
 
     public virtual Vector3 GetClosestNodePosition()
         => GetObjectPosition();

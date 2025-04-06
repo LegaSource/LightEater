@@ -30,6 +30,8 @@ public class AnimatorHandler : ILightSource
     public virtual void HandleLightRestoration()
         => animator.SetBool("on", true);
 
+    public virtual void HandleInterruptAction() { }
+
     public virtual Vector3 GetClosestNodePosition()
         => animator.transform.position;
 

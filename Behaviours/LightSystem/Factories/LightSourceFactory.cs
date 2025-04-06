@@ -1,5 +1,4 @@
-﻿using GameNetcodeStuff;
-using LightEater.Behaviours.LightSystem.Interfaces;
+﻿using LightEater.Behaviours.LightSystem.Interfaces;
 using LightEater.Managers;
 using UnityEngine;
 
@@ -33,6 +32,7 @@ public class LightSourceFactory
 
     public static ILightSource GetLightHandler(object lightSource, Deluminator deluminator) => lightSource switch
     {
+        ShipLights => new Handlers.DeluminatorHandlers.ShipLightsHandler(deluminator),
         EnemyAI enemy => new Handlers.DeluminatorHandlers.EnemyHandler(deluminator, enemy),
         GrabbableObject grabbableObject => new Handlers.DeluminatorHandlers.GrabbableObjectHandler(deluminator, grabbableObject),
         Turret turret => new Handlers.DeluminatorHandlers.TurretHandler(deluminator, turret),
@@ -40,22 +40,4 @@ public class LightSourceFactory
         Animator animator => new Handlers.DeluminatorHandlers.AnimatorHandler(deluminator, animator),
         _ => null
     };
-
-    public static GameObject GetClosestLightSourceInView(Deluminator deluminator)
-    {
-        PlayerControllerB player = deluminator?.playerHeldBy;
-        if (player == null) return null;
-
-        Ray ray = new Ray(player.gameplayCamera.transform.position, player.gameplayCamera.transform.forward);
-        if (Physics.SphereCast(ray, 2f, out RaycastHit hit, 15f))
-        {
-            GameObject lightSource = hit.collider.GetComponent<EnemyAI>()?.gameObject
-                ?? hit.collider.GetComponent<GrabbableObject>()?.gameObject
-                ?? hit.collider.GetComponent<Turret>()?.gameObject
-                ?? hit.collider.GetComponent<Landmine>()?.gameObject
-                ?? hit.collider.GetComponent<Animator>()?.gameObject;
-            return lightSource;
-        }
-        return null;
-    }
 }

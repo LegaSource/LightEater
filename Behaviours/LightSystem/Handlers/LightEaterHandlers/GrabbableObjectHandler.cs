@@ -7,14 +7,24 @@ public class GrabbableObjectHandler(LightEaterAI lightEater, GrabbableObject gra
 {
     private readonly LightEaterAI lightEater = lightEater;
 
-    public override bool HandleLightConsumption(float absorbDuration, float timePassed)
-        => base.HandleLightConsumption(absorbDuration, timePassed)
-            && !(grabbableObject.insertedBattery.charge > 0 && !LightEnergyManager.CanBeAbsorbed(grabbableObject, lightEater.transform.position, 15f));
+    public override bool HandleLightConsumption(float absorbDuration, float remainingDuration, float timePassed)
+        => base.HandleLightConsumption(absorbDuration, remainingDuration, timePassed)
+            && !(grabbableObject.insertedBattery.charge > 0f && !LightEnergyManager.CanBeAbsorbed(grabbableObject, lightEater.transform.position, 15f));
 
     public override void HandleLightDepletion()
     {
         base.HandleLightDepletion();
         lightEater.energyNetwork.currentCharge += ConfigManager.itemCharge.Value;
+    }
+
+    public override bool HandleLightInjection(float releaseDuration, float remainingDuration, float timePassed)
+        => base.HandleLightInjection(releaseDuration, remainingDuration, timePassed)
+            && !(grabbableObject.insertedBattery.charge < 1f && !LightEnergyManager.CanBeAbsorbed(grabbableObject, lightEater.transform.position, 15f));
+
+    public override void HandleLightRestoration()
+    {
+        base.HandleLightRestoration();
+        lightEater.energyNetwork.currentCharge -= ConfigManager.itemCharge.Value;
     }
 
     public override Vector3 GetClosestNodePosition()

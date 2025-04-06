@@ -7,7 +7,6 @@ using LightEater.Behaviours;
 using LightEater.Managers;
 using LightEater.Patches;
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
@@ -30,12 +29,6 @@ public class LightEater : BaseUnityPlugin
     public static GameObject deluminatorObj;
 
     public static bool isSellBodies = false;
-
-    public static HashSet<EnemyAI> enemies = [];
-    public static HashSet<GrabbableObject> grabbableObjects = [];
-    public static HashSet<BeltBagItem> beltBags = [];
-    public static HashSet<Turret> turrets = [];
-    public static HashSet<Landmine> landmines = [];
 
     public void Awake()
     {

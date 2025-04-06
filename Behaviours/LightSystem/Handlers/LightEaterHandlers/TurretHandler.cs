@@ -13,6 +13,12 @@ public class TurretHandler(LightEaterAI lightEater, Turret turret) : Handlers.Tu
         lightEater.energyNetwork.currentCharge += ConfigManager.turretCharge.Value;
     }
 
+    public override void HandleLightRestoration()
+    {
+        base.HandleLightRestoration();
+        lightEater.energyNetwork.currentCharge -= ConfigManager.turretCharge.Value;
+    }
+
     public override Vector3 GetClosestNodePosition()
         => lightEater.ChooseClosestNodeToPosition(lightEater.energyNetwork.closestLightSource.transform.position).position;
 }

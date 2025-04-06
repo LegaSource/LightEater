@@ -10,9 +10,9 @@ public class AnimatorHandler : ILightSource
     protected AnimatorHandler(Animator animator)
         => this.animator = animator;
 
-    public virtual void HandleLightInitialization(ref float absorbDuration) { }
+    public virtual void HandleLightInitialization(ref float remainingDuration, bool enable) { }
 
-    public virtual bool HandleLightConsumption(float absorbDuration, float timePassed)
+    public virtual bool HandleLightConsumption(float absorbDuration, float remainingDuration, float timePassed)
     {
         animator?.SetTrigger("Flicker");
         return true;
@@ -20,6 +20,15 @@ public class AnimatorHandler : ILightSource
 
     public virtual void HandleLightDepletion()
         => animator.SetBool("on", false);
+
+    public virtual bool HandleLightInjection(float releaseDuration, float remainingDuration, float timePassed)
+    {
+        animator?.SetTrigger("Flicker");
+        return true;
+    }
+
+    public virtual void HandleLightRestoration()
+        => animator.SetBool("on", true);
 
     public virtual Vector3 GetClosestNodePosition()
         => animator.transform.position;

@@ -12,7 +12,11 @@ public class Constants
     public const string OLD_BIRD_NAME = "RadMech";
     // Messages
     public const string IMPOSSIBLE_ACTION = "Impossible Action";
-    public const string MESSAGE_INFO_NO_LIGHT = "No targeted light";
+    public const string INFORMATION = "Information";
+    public const string MESSAGE_INFO_WAIT_SHIP = "Cannot be used until the ship has landed";
+    public const string MESSAGE_INFO_NO_LIGHT = "No targeted light source or unavailable charge";
+    public const string MESSAGE_INFO_ABSORPTION_CANCELED = "Light source absorption cancelled out";
+    public const string MESSAGE_INFO_RELEASE_CANCELED = "Light source release cancelled out";
     public const string MESSAGE_RECHARGE_SHIP_ENERGY = "Recharge ship's energy";
     public const string MESSAGE_NO_SHIP_ENERGY = "Not enough energy left...";
     public const string MESSAGE_DEFAULT_ITEM_CHARGER = "(Requires battery-powered item)";

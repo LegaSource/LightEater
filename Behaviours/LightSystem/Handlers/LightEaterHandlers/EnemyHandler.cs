@@ -15,4 +15,12 @@ public class EnemyHandler(LightEaterAI lightEater, EnemyAI enemy) : Handlers.Ene
         EnemyValue enemyValue = ConfigManager.enemiesValues.FirstOrDefault(e => e.EnemyName.Equals(enemy.enemyType.enemyName));
         lightEater.energyNetwork.currentCharge += enemyValue?.AbsorbCharge ?? 20;
     }
+
+    public override void HandleLightRestoration()
+    {
+        base.HandleLightRestoration();
+
+        EnemyValue enemyValue = ConfigManager.enemiesValues.FirstOrDefault(e => e.EnemyName.Equals(enemy.enemyType.enemyName));
+        lightEater.energyNetwork.currentCharge -= enemyValue?.AbsorbCharge ?? 20;
+    }
 }

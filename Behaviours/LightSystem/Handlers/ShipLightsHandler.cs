@@ -17,14 +17,14 @@ public class ShipLightsHandler : ILightSource
         shipDoorsAnimator = StartOfRound.Instance.shipDoorsAnimator;
     }
 
-    public virtual void HandleLightInitialization(ref float absorbDuration)
+    public virtual void HandleLightInitialization(ref float remainingDuration, bool enable)
     {
         StartOfRound.Instance.PowerSurgeShip();
         shipAnimator.SetBool("AlarmRinging", value: true);
         StartOfRound.Instance.shipDoorAudioSource.PlayOneShot(StartOfRound.Instance.alarmSFX);
     }
 
-    public virtual bool HandleLightConsumption(float absorbDuration, float timePassed)
+    public virtual bool HandleLightConsumption(float absorbDuration, float remainingDuration, float timePassed)
     {
         shipDoorsAnimator.SetBool("Closed", value: !shipDoorsAnimator.GetBool("Closed"));
         return true;
@@ -34,6 +34,15 @@ public class ShipLightsHandler : ILightSource
     {
         ShipLightsPatch.hasBeenAbsorbed = true;
         StartOfRoundPatch.EnablesShipFunctionalities(false);
+        shipAnimator.SetBool("AlarmRinging", value: false);
+    }
+
+    public virtual bool HandleLightInjection(float releaseDuration, float remainingDuration, float timePassed) => true;
+
+    public virtual void HandleLightRestoration()
+    {
+        ShipLightsPatch.hasBeenAbsorbed = false;
+        StartOfRoundPatch.EnablesShipFunctionalities(true);
         shipAnimator.SetBool("AlarmRinging", value: false);
     }
 

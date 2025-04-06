@@ -148,9 +148,9 @@ public class LightEaterAI : EnemyAI
             absorbDistance = 20;
             energyNetwork.closestLightSource = StartOfRound.Instance.shipRoomLights.gameObject;
         }
-        else if (LightEater.enemies.Any(r => !r.isEnemyDead))
+        else if (LightEnergyManager.GetEnemies(true).Any(r => !r.isEnemyDead))
         {
-            EnemyAI closestEnemy = LightEater.enemies.Where(r => !r.isEnemyDead)
+            EnemyAI closestEnemy = LightEnergyManager.GetEnemies(true).Where(r => !r.isEnemyDead)
                 .OrderBy(r => Vector3.Distance(transform.position, r.transform.position))
                 .FirstOrDefault();
             absorbDistance = ConfigManager.enemiesValues
@@ -165,7 +165,7 @@ public class LightEaterAI : EnemyAI
             if (!isOutside)
             {
                 path1 = new NavMeshPath();
-                energyNetwork.closestLightSource = RoundManager.Instance.allPoweredLightsAnimators
+                energyNetwork.closestLightSource = LightEnergyManager.GetPoweredLights(true)
                     .Where(l => l != null && agent.CalculatePath(ChooseClosestNodeToPosition(l.transform.position).position, path1))
                     .OrderBy(l => Vector3.Distance(transform.position, l.transform.position))
                     .FirstOrDefault()?
@@ -173,7 +173,7 @@ public class LightEaterAI : EnemyAI
             }
             else
             {
-                energyNetwork.closestLightSource = RoundManager.Instance.allPoweredLightsAnimators
+                energyNetwork.closestLightSource = LightEnergyManager.GetPoweredLights(true)
                     .OrderBy(l => l ? Vector3.Distance(GetEntranceExitPosition(GetClosestEntrance()), l.transform.position) : float.MaxValue)
                     .FirstOrDefault()?
                     .gameObject;
@@ -222,7 +222,7 @@ public class LightEaterAI : EnemyAI
     public bool CloseToLightSource()
     {
         _ = CrossingLight();
-        object lightSource = LightEnergyManager.DetermineLightSource(energyNetwork.closestLightSource);
+        object lightSource = LightEnergyManager.DetermineLightSource(energyNetwork.closestLightSource, true);
 
         if ((lightSource is ShipLights && !isOutside)
             || (lightSource is EnemyAI enemy && enemy.isOutside != isOutside)
@@ -402,16 +402,16 @@ public class LightEaterAI : EnemyAI
 
     public bool CrossingLight()
     {
-        GameObject crossedLight = RoundManager.Instance.allPoweredLightsAnimators
+        GameObject crossedLight = LightEnergyManager.GetPoweredLights(true)
             .FirstOrDefault(l => l != null && Vector3.Distance(transform.position, l.transform.position) <= 10f)?
             .gameObject
-            ?? LightEater.grabbableObjects
+            ?? LightEnergyManager.grabbableObjects
                 .FirstOrDefault(g => LightEnergyManager.CanBeAbsorbed(g, transform.position, 10f))?
                 .gameObject
-            ?? LightEater.turrets
+            ?? LightEnergyManager.GetTurrets(true)
                 .FirstOrDefault(t => t != null && t.turretActive && Vector3.Distance(transform.position, t.transform.position) <= 10f)?
                 .gameObject
-            ?? LightEater.landmines
+            ?? LightEnergyManager.GetLandmines(true)
                 .FirstOrDefault(l => l != null && l.mineActivated && Vector3.Distance(transform.position, l.transform.position) <= 10f)?
                 .gameObject;
 

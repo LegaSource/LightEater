@@ -14,9 +14,9 @@ public class EnemyHandler : ILightSource
     protected EnemyHandler(EnemyAI enemy)
         => this.enemy = enemy;
 
-    public virtual void HandleLightInitialization(ref float absorbDuration) { }
+    public virtual void HandleLightInitialization(ref float remainingDuration, bool enable) { }
 
-    public virtual bool HandleLightConsumption(float absorbDuration, float timePassed)
+    public virtual bool HandleLightConsumption(float absorbDuration, float remainingDuration, float timePassed)
     {
         if (enemy is RadMechAI radMech)
         {
@@ -30,7 +30,7 @@ public class EnemyHandler : ILightSource
     {
         if (!GameNetworkManager.Instance.localPlayerController.IsHost && !GameNetworkManager.Instance.localPlayerController.IsServer) return;
 
-        _ = LightEater.enemies.Remove(enemy);
+        LightEnergyManager.SetEnemyValue(enemy, false);
 
         if (enemy.isEnemyDead) return;
 
@@ -44,6 +44,10 @@ public class EnemyHandler : ILightSource
         EnemyValue enemyValue = ConfigManager.enemiesValues.FirstOrDefault(e => e.EnemyName.Equals(enemy.enemyType.enemyName));
         enemy.KillEnemyOnOwnerClient(enemyValue?.Destroy ?? true);
     }
+
+    public virtual bool HandleLightInjection(float releaseDuration, float remainingDuration, float timePassed) => false;
+
+    public virtual void HandleLightRestoration() { }
 
     public virtual Vector3 GetClosestNodePosition()
         => enemy.transform.position;

@@ -1,4 +1,5 @@
 ﻿using LightEater.Behaviours.LightSystem.Interfaces;
+using LightEater.Managers;
 using UnityEngine;
 
 namespace LightEater.Behaviours.LightSystem.Handlers;
@@ -10,9 +11,9 @@ public class TurretHandler : ILightSource
     protected TurretHandler(Turret turret)
         => this.turret = turret;
 
-    public virtual void HandleLightInitialization(ref float absorbDuration) { }
+    public virtual void HandleLightInitialization(ref float remainingDuration, bool enable) { }
 
-    public virtual bool HandleLightConsumption(float absorbDuration, float timePassed)
+    public virtual bool HandleLightConsumption(float absorbDuration, float remainingDuration, float timePassed)
     {
         turret.SwitchTurretMode((int)TurretMode.Berserk);
         return true;
@@ -29,7 +30,15 @@ public class TurretHandler : ILightSource
         turret.bulletParticles.Stop(withChildren: true, ParticleSystemStopBehavior.StopEmitting);
         turret.turretAnimator.SetInteger("TurretMode", 0);
 
-        _ = LightEater.turrets.Remove(turret);
+        LightEnergyManager.SetTurretValue(turret, false);
+    }
+
+    public virtual bool HandleLightInjection(float releaseDuration, float remainingDuration, float timePassed) => true;
+
+    public virtual void HandleLightRestoration()
+    {
+        turret.ToggleTurretEnabledLocalClient(true);
+        LightEnergyManager.SetTurretValue(turret, true);
     }
 
     public virtual Vector3 GetClosestNodePosition()

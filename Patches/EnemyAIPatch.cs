@@ -1,5 +1,6 @@
 ﻿using HarmonyLib;
 using LightEater.Behaviours;
+using LightEater.Managers;
 
 namespace LightEater.Patches;
 
@@ -8,7 +9,7 @@ internal class EnemyAIPatch
     [HarmonyPatch(typeof(EnemyAI), nameof(EnemyAI.Start))]
     [HarmonyPostfix]
     private static void StartEnemy(ref EnemyAI __instance)
-        => RoundManagerPatch.AddEnemy(__instance);
+        => LightEnergyManager.AddEnemy(__instance);
 
     [HarmonyPatch(typeof(EnemyAICollisionDetect), "IShockableWithGun.CanBeShocked")]
     [HarmonyPrefix]

@@ -10,9 +10,9 @@ public class EnemyHandler(Deluminator deluminator, EnemyAI enemy) : Handlers.Ene
 {
     private readonly Deluminator deluminator = deluminator;
 
-    public override bool HandleLightConsumption(float absorbDuration, float timePassed)
+    public override bool HandleLightConsumption(float absorbDuration, float remainingDuration, float timePassed)
     {
-        if (!base.HandleLightConsumption(absorbDuration, timePassed)) return false;
+        if (!base.HandleLightConsumption(absorbDuration, remainingDuration, timePassed)) return false;
 
         PlayerControllerB localPlayer = GameNetworkManager.Instance.localPlayerController;
         if (localPlayer.IsHost || localPlayer.IsServer)
@@ -21,7 +21,7 @@ public class EnemyHandler(Deluminator deluminator, EnemyAI enemy) : Handlers.Ene
             if (player != null) enemy.SetMovingTowardsTargetPlayer(player);
         }
 
-        return Vector3.Distance(deluminator.transform.position, enemy.transform.position) <= 15f;
+        return Vector3.Distance(deluminator.transform.position, enemy.transform.position) <= 7.5f;
     }
 
     public override void HandleLightDepletion()
@@ -31,4 +31,6 @@ public class EnemyHandler(Deluminator deluminator, EnemyAI enemy) : Handlers.Ene
         EnemyValue enemyValue = ConfigManager.enemiesValues.FirstOrDefault(e => e.EnemyName.Equals(enemy.enemyType.enemyName));
         deluminator.energyNetwork.currentCharge += enemyValue?.AbsorbCharge ?? 20;
     }
+
+    public override bool HandleLightInjection(float releaseDuration, float remainingDuration, float timePassed) => false;
 }

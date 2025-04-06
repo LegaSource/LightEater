@@ -1,4 +1,5 @@
 ﻿using HarmonyLib;
+using LightEater.Managers;
 
 namespace LightEater.Patches;
 
@@ -10,9 +11,9 @@ internal class GrabbableObjectPatch
     {
         if (__instance is BeltBagItem beltBagItem)
         {
-            RoundManagerPatch.AddBeltBagItem(beltBagItem);
+            LightEnergyManager.AddBeltBag(beltBagItem);
             return;
         }
-        RoundManagerPatch.AddGrabbableObject(__instance);
+        LightEnergyManager.AddObject(__instance);
     }
 }

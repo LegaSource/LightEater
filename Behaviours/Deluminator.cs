@@ -38,8 +38,8 @@ public class Deluminator : PhysicsProp
 
     public override void DiscardItem()
     {
-        base.DiscardItem();
         energyNetwork.StopCoroutineServerRpc(true);
+        base.DiscardItem();
     }
 
     public override void ItemActivate(bool used, bool buttonDown = true)

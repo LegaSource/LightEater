@@ -333,7 +333,7 @@ public class LightEaterAI : EnemyAI
             return true;
         }
 
-        energyNetwork.currentCharge -= 100;
+        energyNetwork.UpdateCharges(energyNetwork.currentCharge - 100);
         explodeTimer = 0f;
 
         StunExplosionClientRpc();
@@ -354,7 +354,7 @@ public class LightEaterAI : EnemyAI
 
         if (killCoroutine == null)
         {
-            energyNetwork.currentCharge = 200;
+            energyNetwork.UpdateCharges(200);
             creatureAnimator.SetTrigger("startRun");
             enemyType.canDie = false;
             stunCoroutine = null;
@@ -475,11 +475,8 @@ public class LightEaterAI : EnemyAI
     }
 
     [ServerRpc(RequireOwnership = false)]
-    public void ShockEnemyServerRpc(int charge)
-    {
-        energyNetwork.currentCharge += charge;
-        isShocked = false;
-    }
+    public void StopShockingServerRpc()
+        => isShocked = false;
 
     public override void HitEnemy(int force = 1, PlayerControllerB playerWhoHit = null, bool playHitSFX = false, int hitID = -1)
     {
@@ -504,7 +501,8 @@ public class LightEaterAI : EnemyAI
         yield return new WaitForSeconds(4f);
 
         energyNetwork.StopHandleLightCoroutine(false);
-        if (IsServer || IsHost) SpawnDeluminator(LightEater.deluminatorObj, transform.position + (Vector3.up * 0.5f));
+        if (ConfigManager.isDeluminator.Value && (IsServer || IsHost)) SpawnDeluminator(LightEater.deluminatorObj, transform.position + (Vector3.up * 0.5f));
+        CustomPassManager.RemoveAura(this);
 
         base.KillEnemy(destroy);
         Landmine.SpawnExplosion(transform.position + Vector3.up, spawnExplosionEffect: true, 6f, 6.3f);

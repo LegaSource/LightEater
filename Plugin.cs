@@ -19,7 +19,7 @@ public class LightEater : BaseUnityPlugin
 {
     private const string modGUID = "Lega.LightEater";
     private const string modName = "Light Eater";
-    private const string modVersion = "1.0.5";
+    private const string modVersion = "1.0.7";
 
     private readonly Harmony harmony = new Harmony(modGUID);
     private static readonly AssetBundle bundle = AssetBundle.LoadFromFile(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "lighteater"));
@@ -28,6 +28,9 @@ public class LightEater : BaseUnityPlugin
 
     // Items
     public static GameObject deluminatorObj;
+
+    // Materials
+    public static Material overchargeShader;
 
     public static bool isSellBodies = false;
 
@@ -41,6 +44,7 @@ public class LightEater : BaseUnityPlugin
         NetcodePatcher();
         LoadEnemies();
         LoadItems();
+        LoadShaders();
 
         harmony.PatchAll(typeof(StartOfRoundPatch));
         harmony.PatchAll(typeof(RoundManagerPatch));
@@ -88,7 +92,9 @@ public class LightEater : BaseUnityPlugin
     }
 
     public void LoadItems()
-        => deluminatorObj = RegisterItem(typeof(Deluminator), bundle.LoadAsset<Item>("Assets/Deluminator/DeluminatorItem.asset")).spawnPrefab;
+    {
+        if (ConfigManager.isDeluminator.Value) deluminatorObj = RegisterItem(typeof(Deluminator), bundle.LoadAsset<Item>("Assets/Deluminator/DeluminatorItem.asset")).spawnPrefab;
+    }
 
     public Item RegisterItem(Type type, Item item)
     {
@@ -106,6 +112,9 @@ public class LightEater : BaseUnityPlugin
 
         return item;
     }
+
+    public static void LoadShaders()
+        => overchargeShader = bundle.LoadAsset<Material>("Assets/Shaders/OverchargeMaterial.mat");
 
     public static void PatchOtherMods()
         => isSellBodies = Type.GetType("SellBodies.MyPluginInfo, SellBodies") != null;

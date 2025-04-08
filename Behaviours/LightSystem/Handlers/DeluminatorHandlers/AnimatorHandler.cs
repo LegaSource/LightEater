@@ -19,7 +19,8 @@ public class AnimatorHandler(Deluminator deluminator, Animator animator) : Handl
     public override void HandleLightDepletion()
     {
         base.HandleLightDepletion();
-        deluminator.energyNetwork.currentCharge += ConfigManager.lightCharge.Value;
+        int charges = Mathf.Min(200, deluminator.energyNetwork.currentCharge + ConfigManager.lightCharge.Value);
+        deluminator.energyNetwork.UpdateCharges(charges);
         LightEnergyManager.SetPoweredLightValue(deluminator.energyNetwork.closestLightSource, false);
     }
 
@@ -34,7 +35,7 @@ public class AnimatorHandler(Deluminator deluminator, Animator animator) : Handl
     public override void HandleLightRestoration()
     {
         base.HandleLightRestoration();
-        deluminator.energyNetwork.currentCharge -= ConfigManager.lightCharge.Value;
+        deluminator.energyNetwork.UpdateCharges(deluminator.energyNetwork.currentCharge - ConfigManager.lightCharge.Value);
         LightEnergyManager.SetPoweredLightValue(deluminator.energyNetwork.closestLightSource, true);
     }
 }

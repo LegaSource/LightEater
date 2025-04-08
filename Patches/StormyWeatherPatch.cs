@@ -95,6 +95,6 @@ internal class StormyWeatherPatch
     private static void LightningStrike()
     {
         if (targetedLightEater == null) return;
-        targetedLightEater.energyNetwork.currentCharge += ConfigManager.stormCharge.Value;
+        targetedLightEater.energyNetwork.UpdateCharges(targetedLightEater.energyNetwork.currentCharge + ConfigManager.stormCharge.Value);
     }
 }

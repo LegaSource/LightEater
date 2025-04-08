@@ -13,6 +13,7 @@ public class ConfigManager
 
     // GLOBAL
     public static ConfigEntry<string> spawnWeights;
+    public static ConfigEntry<bool> isDeluminator;
     public static ConfigEntry<float> huntingSpeed;
     public static ConfigEntry<float> chasingSpeed;
     public static ConfigEntry<int> damage;
@@ -41,6 +42,7 @@ public class ConfigManager
     {
         // GLOBAL
         spawnWeights = LightEater.configFile.Bind(Constants.GLOBAL, "Spawn weights", "Vanilla:20,Modded:20", $"{Constants.LIGHT_EATER} spawn weights");
+        isDeluminator = LightEater.configFile.Bind(Constants.GLOBAL, "Enable Deluminator", true, $"Is {Constants.DELUMINATOR} item enabled?");
         huntingSpeed = LightEater.configFile.Bind(Constants.GLOBAL, "Hunting speed", 3f, $"{Constants.LIGHT_EATER} speed when it moves towards a light");
         chasingSpeed = LightEater.configFile.Bind(Constants.GLOBAL, "Chasing speed", 4f, $"{Constants.LIGHT_EATER} speed when it moves towards a player");
         damage = LightEater.configFile.Bind(Constants.GLOBAL, "Damage", 20, $"{Constants.LIGHT_EATER} damage");

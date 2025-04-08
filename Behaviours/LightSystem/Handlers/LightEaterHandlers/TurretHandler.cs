@@ -10,13 +10,7 @@ public class TurretHandler(LightEaterAI lightEater, Turret turret) : Handlers.Tu
     public override void HandleLightDepletion()
     {
         base.HandleLightDepletion();
-        lightEater.energyNetwork.currentCharge += ConfigManager.turretCharge.Value;
-    }
-
-    public override void HandleLightRestoration()
-    {
-        base.HandleLightRestoration();
-        lightEater.energyNetwork.currentCharge -= ConfigManager.turretCharge.Value;
+        lightEater.energyNetwork.UpdateCharges(lightEater.energyNetwork.currentCharge + ConfigManager.turretCharge.Value);
     }
 
     public override Vector3 GetClosestNodePosition()

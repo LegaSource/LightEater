@@ -10,6 +10,8 @@ public class Constants
     // Enemies
     public const string LIGHT_EATER = "Light Eater";
     public const string OLD_BIRD_NAME = "RadMech";
+    // Items
+    public const string DELUMINATOR = "Deluminator";
     // Messages
     public const string IMPOSSIBLE_ACTION = "Impossible Action";
     public const string INFORMATION = "Information";

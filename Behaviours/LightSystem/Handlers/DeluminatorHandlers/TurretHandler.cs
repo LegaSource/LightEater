@@ -19,7 +19,8 @@ public class TurretHandler(Deluminator deluminator, Turret turret) : Handlers.Tu
     public override void HandleLightDepletion()
     {
         base.HandleLightDepletion();
-        deluminator.energyNetwork.currentCharge += ConfigManager.turretCharge.Value;
+        int charges = Mathf.Min(200, deluminator.energyNetwork.currentCharge + ConfigManager.turretCharge.Value);
+        deluminator.energyNetwork.UpdateCharges(charges);
     }
 
     public override bool HandleLightInjection(float releaseDuration, float remainingDuration, float timePassed)
@@ -33,6 +34,6 @@ public class TurretHandler(Deluminator deluminator, Turret turret) : Handlers.Tu
     public override void HandleLightRestoration()
     {
         base.HandleLightRestoration();
-        deluminator.energyNetwork.currentCharge -= ConfigManager.turretCharge.Value;
+        deluminator.energyNetwork.UpdateCharges(deluminator.energyNetwork.currentCharge - ConfigManager.turretCharge.Value);
     }
 }

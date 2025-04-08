@@ -10,13 +10,7 @@ public class LandmineHandler(LightEaterAI lightEater, Landmine landmine) : Handl
     public override void HandleLightDepletion()
     {
         base.HandleLightDepletion();
-        lightEater.energyNetwork.currentCharge += ConfigManager.landmineCharge.Value;
-    }
-
-    public override void HandleLightRestoration()
-    {
-        base.HandleLightRestoration();
-        lightEater.energyNetwork.currentCharge -= ConfigManager.landmineCharge.Value;
+        lightEater.energyNetwork.UpdateCharges(lightEater.energyNetwork.currentCharge + ConfigManager.landmineCharge.Value);
     }
 
     public override Vector3 GetClosestNodePosition()

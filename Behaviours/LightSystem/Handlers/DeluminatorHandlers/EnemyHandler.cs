@@ -29,7 +29,8 @@ public class EnemyHandler(Deluminator deluminator, EnemyAI enemy) : Handlers.Ene
         base.HandleLightDepletion();
 
         EnemyValue enemyValue = ConfigManager.enemiesValues.FirstOrDefault(e => e.EnemyName.Equals(enemy.enemyType.enemyName));
-        deluminator.energyNetwork.currentCharge += enemyValue?.AbsorbCharge ?? 20;
+        int charges = Mathf.Min(200, deluminator.energyNetwork.currentCharge + enemyValue?.AbsorbCharge ?? 20);
+        deluminator.energyNetwork.UpdateCharges(charges);
     }
 
     public override bool HandleLightInjection(float releaseDuration, float remainingDuration, float timePassed) => false;

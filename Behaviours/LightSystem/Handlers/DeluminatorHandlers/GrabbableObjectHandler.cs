@@ -1,4 +1,5 @@
 ﻿using LightEater.Managers;
+using UnityEngine;
 
 namespace LightEater.Behaviours.LightSystem.Handlers.DeluminatorHandlers;
 
@@ -13,7 +14,8 @@ public class GrabbableObjectHandler(Deluminator deluminator, GrabbableObject gra
     public override void HandleLightDepletion()
     {
         base.HandleLightDepletion();
-        deluminator.energyNetwork.currentCharge += ConfigManager.itemCharge.Value;
+        int charges = Mathf.Min(200, deluminator.energyNetwork.currentCharge + ConfigManager.itemCharge.Value);
+        deluminator.energyNetwork.UpdateCharges(charges);
     }
 
     public override bool HandleLightInjection(float releaseDuration, float remainingDuration, float timePassed)
@@ -23,6 +25,6 @@ public class GrabbableObjectHandler(Deluminator deluminator, GrabbableObject gra
     public override void HandleLightRestoration()
     {
         base.HandleLightRestoration();
-        deluminator.energyNetwork.currentCharge -= ConfigManager.itemCharge.Value;
+        deluminator.energyNetwork.UpdateCharges(deluminator.energyNetwork.currentCharge - ConfigManager.itemCharge.Value);
     }
 }

@@ -23,6 +23,36 @@ public class LightEnergyNetworkManager : NetworkBehaviour
     public int currentActionType = (int)LightActionType.Absorb;
     public enum LightActionType { Absorb, Release }
 
+    public void UpdateCharges(int charges)
+    {
+        if (NetworkManager.Singleton.IsHost)
+        {
+            UpdateChargesClientRpc(charges);
+            return;
+        }
+        UpdateChargesServerRpc(charges);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void UpdateChargesServerRpc(int charges)
+        => UpdateChargesClientRpc(charges);
+
+    [ClientRpc]
+    public void UpdateChargesClientRpc(int charges)
+    {
+        currentCharge = charges;
+
+        LightEaterAI lightEater = GetComponentInParent<LightEaterAI>();
+        if (lightEater == null) return;
+
+        if (currentCharge <= 200)
+        {
+            CustomPassManager.RemoveAura(lightEater);
+            return;
+        }
+        CustomPassManager.SetupCustomPassForEnemy(lightEater);
+    }
+
     public void HandleLight(GameObject lightSource, LightActionType actionType)
     {
         if (handleLightCoroutine != null) return;

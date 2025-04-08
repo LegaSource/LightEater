@@ -7,12 +7,12 @@ public class ShipLightsHandler(Deluminator deluminator) : Handlers.ShipLightsHan
     public override void HandleLightDepletion()
     {
         base.HandleLightDepletion();
-        deluminator.energyNetwork.currentCharge += 200;
+        deluminator.energyNetwork.UpdateCharges(200);
     }
 
     public override void HandleLightRestoration()
     {
         base.HandleLightRestoration();
-        deluminator.energyNetwork.currentCharge -= 200;
+        deluminator.energyNetwork.UpdateCharges(0);
     }
 }

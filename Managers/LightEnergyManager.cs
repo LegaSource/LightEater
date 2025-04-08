@@ -1,7 +1,6 @@
 ﻿using GameNetcodeStuff;
 using LightEater.Behaviours;
 using LightEater.Patches;
-using LightEater.Values;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -166,27 +165,16 @@ public class LightEnergyManager
             && grabbableObject.insertedBattery != null
             && ((enable && grabbableObject.insertedBattery.charge > 0f) || (!enable && grabbableObject.insertedBattery.charge < 1f));
 
-    public static bool CanChargeBeApplied(int currentCharge, GameObject lightSource, bool enable)
+    public static bool CanChargeBeApplied(int currentCharge, GameObject lightSource, bool enable) => DetermineLightSource(lightSource, enable) switch
     {
-        switch (DetermineLightSource(lightSource, enable))
-        {
-            case ShipLights:
-                return (enable && currentCharge <= 0f) || (!enable && currentCharge >= 200f);
-            case GrabbableObject:
-                return (enable && currentCharge + ConfigManager.itemCharge.Value <= 200f) || (!enable && currentCharge >= ConfigManager.itemCharge.Value);
-            case Turret:
-                return (enable && currentCharge + ConfigManager.turretCharge.Value <= 200f) || (!enable && currentCharge >= ConfigManager.turretCharge.Value);
-            case Landmine:
-                return (enable && currentCharge + ConfigManager.landmineCharge.Value <= 200f) || (!enable && currentCharge >= ConfigManager.landmineCharge.Value);
-            case EnemyAI enemy:
-                EnemyValue enemyValue = ConfigManager.enemiesValues.FirstOrDefault(e => e.EnemyName.Equals(enemy.enemyType.enemyName));
-                int enemyCharge = enemyValue?.AbsorbCharge ?? 20;
-                return enable && currentCharge + enemyCharge <= 200f;
-            case Animator:
-                return (enable && currentCharge + ConfigManager.lightCharge.Value <= 200f) || (!enable && currentCharge >= ConfigManager.lightCharge.Value);
-        }
-        return false;
-    }
+        ShipLights => enable || (!enable && currentCharge >= 200f),
+        EnemyAI => enable,
+        GrabbableObject => enable || (!enable && currentCharge >= ConfigManager.itemCharge.Value),
+        Turret => enable || (!enable && currentCharge >= ConfigManager.turretCharge.Value),
+        Landmine => enable || (!enable && currentCharge >= ConfigManager.landmineCharge.Value),
+        Animator => enable || (!enable && currentCharge >= ConfigManager.lightCharge.Value),
+        _ => false
+    };
 
     public static object DetermineLightSource(GameObject lightSource, bool enable)
         => lightSource.GetComponentInParent<ShipLights>() is ShipLights shipLights

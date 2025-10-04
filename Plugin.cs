@@ -19,7 +19,7 @@ public class LightEater : BaseUnityPlugin
 {
     private const string modGUID = "Lega.LightEater";
     private const string modName = "Light Eater";
-    private const string modVersion = "1.0.7";
+    private const string modVersion = "1.0.8";
 
     private readonly Harmony harmony = new Harmony(modGUID);
     private static readonly AssetBundle bundle = AssetBundle.LoadFromFile(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "lighteater"));

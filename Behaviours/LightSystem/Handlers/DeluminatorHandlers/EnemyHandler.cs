@@ -1,4 +1,4 @@
-﻿using GameNetcodeStuff;
+﻿using LegaFusionCore.Utilities;
 using LightEater.Managers;
 using LightEater.Values;
 using System.Linq;
@@ -12,16 +12,13 @@ public class EnemyHandler(Deluminator deluminator, EnemyAI enemy) : Handlers.Ene
 
     public override bool HandleLightConsumption(float absorbDuration, float remainingDuration, float timePassed)
     {
-        if (!base.HandleLightConsumption(absorbDuration, remainingDuration, timePassed)) return false;
-
-        PlayerControllerB localPlayer = GameNetworkManager.Instance.localPlayerController;
-        if (localPlayer.IsHost || localPlayer.IsServer)
+        if (base.HandleLightConsumption(absorbDuration, remainingDuration, timePassed))
         {
-            PlayerControllerB player = deluminator.playerHeldBy;
-            if (player != null) enemy.SetMovingTowardsTargetPlayer(player);
+            if (LFCUtilities.IsServer && enemy.targetPlayer == null && deluminator.playerHeldBy != null)
+                enemy.SetMovingTowardsTargetPlayer(deluminator.playerHeldBy);
+            return Vector3.Distance(deluminator.transform.position, enemy.transform.position) <= 7.5f;
         }
-
-        return Vector3.Distance(deluminator.transform.position, enemy.transform.position) <= 7.5f;
+        return false;
     }
 
     public override void HandleLightDepletion()
@@ -29,9 +26,6 @@ public class EnemyHandler(Deluminator deluminator, EnemyAI enemy) : Handlers.Ene
         base.HandleLightDepletion();
 
         EnemyValue enemyValue = ConfigManager.enemiesValues.FirstOrDefault(e => e.EnemyName.Equals(enemy.enemyType.enemyName));
-        int charges = Mathf.Min(200, deluminator.energyNetwork.currentCharge + enemyValue?.AbsorbCharge ?? 20);
-        deluminator.energyNetwork.UpdateCharges(charges);
+        deluminator.energyNetwork.currentCharge = Mathf.Min(200, deluminator.energyNetwork.currentCharge + enemyValue?.AbsorbCharge ?? 20);
     }
-
-    public override bool HandleLightInjection(float releaseDuration, float remainingDuration, float timePassed) => false;
 }

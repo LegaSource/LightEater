@@ -17,22 +17,16 @@ namespace LightEater;
 [BepInPlugin(modGUID, modName, modVersion)]
 public class LightEater : BaseUnityPlugin
 {
-    private const string modGUID = "Lega.LightEater";
-    private const string modName = "Light Eater";
-    private const string modVersion = "1.0.9";
+    internal const string modGUID = "Lega.LightEater";
+    internal const string modName = "Light Eater";
+    internal const string modVersion = "1.1.0";
 
     private readonly Harmony harmony = new Harmony(modGUID);
     private static readonly AssetBundle bundle = AssetBundle.LoadFromFile(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "lighteater"));
     internal static ManualLogSource mls;
     public static ConfigFile configFile;
 
-    // Items
     public static GameObject deluminatorObj;
-
-    // Materials
-    public static Material overchargeShader;
-
-    public static bool isSellBodies = false;
 
     public void Awake()
     {
@@ -44,22 +38,8 @@ public class LightEater : BaseUnityPlugin
         NetcodePatcher();
         LoadEnemies();
         LoadItems();
-        LoadShaders();
 
         harmony.PatchAll(typeof(StartOfRoundPatch));
-        harmony.PatchAll(typeof(RoundManagerPatch));
-        harmony.PatchAll(typeof(GrabbableObjectPatch));
-        harmony.PatchAll(typeof(TurretPatch));
-        harmony.PatchAll(typeof(LandminePatch));
-        harmony.PatchAll(typeof(EnemyAIPatch));
-        harmony.PatchAll(typeof(PatcherToolPatch));
-        if (ConfigManager.interactWithStorm.Value) harmony.PatchAll(typeof(StormyWeatherPatch));
-        if (ConfigManager.disableShipLights.Value) harmony.PatchAll(typeof(ShipLightsPatch));
-        if (ConfigManager.disableShipDoor.Value) harmony.PatchAll(typeof(HangarShipDoorPatch));
-        if (ConfigManager.disableItemCharger.Value) harmony.PatchAll(typeof(ItemChargerPatch));
-        if (ConfigManager.disableShipScreen.Value) harmony.PatchAll(typeof(ManualCameraRendererPatch));
-        if (ConfigManager.disableShipTeleporters.Value) harmony.PatchAll(typeof(ShipTeleporterPatch));
-        PatchOtherMods();
     }
 
     private static void NetcodePatcher()
@@ -112,10 +92,4 @@ public class LightEater : BaseUnityPlugin
 
         return item;
     }
-
-    public static void LoadShaders()
-        => overchargeShader = bundle.LoadAsset<Material>("Assets/Shaders/OverchargeMaterial.mat");
-
-    public static void PatchOtherMods()
-        => isSellBodies = Type.GetType("SellBodies.MyPluginInfo, SellBodies") != null;
 }

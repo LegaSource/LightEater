@@ -7,6 +7,6 @@ public class ShipLightsHandler(LightEaterAI lightEater) : Handlers.ShipLightsHan
     public override void HandleLightDepletion()
     {
         base.HandleLightDepletion();
-        lightEater.energyNetwork.UpdateCharges(lightEater.energyNetwork.currentCharge + 200);
+        lightEater.energyNetwork.currentCharge += 200;
     }
 }

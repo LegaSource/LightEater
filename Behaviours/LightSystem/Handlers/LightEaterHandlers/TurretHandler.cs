@@ -1,5 +1,4 @@
-﻿using LightEater.Managers;
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace LightEater.Behaviours.LightSystem.Handlers.LightEaterHandlers;
 
@@ -10,9 +9,7 @@ public class TurretHandler(LightEaterAI lightEater, Turret turret) : Handlers.Tu
     public override void HandleLightDepletion()
     {
         base.HandleLightDepletion();
-        lightEater.energyNetwork.UpdateCharges(lightEater.energyNetwork.currentCharge + ConfigManager.turretCharge.Value);
+        lightEater.energyNetwork.currentCharge += 20;
     }
-
-    public override Vector3 GetClosestNodePosition()
-        => lightEater.ChooseClosestNodeToPosition(lightEater.energyNetwork.closestLightSource.transform.position).position;
+    public override Vector3 GetClosestNodePosition() => lightEater.ChooseClosestNodeToPosition(lightEater.energyNetwork.closestLightSource.transform.position).position;
 }

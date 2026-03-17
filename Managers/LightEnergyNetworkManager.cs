@@ -1,9 +1,10 @@
-﻿using GameNetcodeStuff;
+﻿using LegaFusionCore.Utilities;
 using LightEater.Behaviours;
 using LightEater.Behaviours.LightSystem.Factories;
 using LightEater.Behaviours.LightSystem.Interfaces;
 using System;
 using System.Collections;
+using System.Linq;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -12,7 +13,6 @@ public class LightEnergyNetworkManager : NetworkBehaviour
 {
     public int currentCharge = 0;
     public GameObject closestLightSource;
-    public float totalDuration;
 
     public Coroutine handleLightCoroutine;
 
@@ -20,112 +20,67 @@ public class LightEnergyNetworkManager : NetworkBehaviour
     public Action StopActionSound;
     public Action ResetAction;
 
-    public int currentActionType = (int)LightActionType.Absorb;
-    public enum LightActionType { Absorb, Release }
-
-    public void UpdateCharges(int charges)
+    public void HandleLight(GameObject lightSource)
     {
-        if (NetworkManager.Singleton.IsHost)
+        if (handleLightCoroutine == null)
         {
-            UpdateChargesClientRpc(charges);
-            return;
+            if (lightSource.TryGetComponentInParent(out NetworkObject networkObject))
+                HandleLightEveryoneRpc(networkObject);
+            else
+                HandleLightEveryoneRpc(lightSource.transform.position);
         }
-        UpdateChargesServerRpc(charges);
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    public void UpdateChargesServerRpc(int charges)
-        => UpdateChargesClientRpc(charges);
-
-    [ClientRpc]
-    public void UpdateChargesClientRpc(int charges)
+    // Avec NetworkObject
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void HandleLightEveryoneRpc(NetworkObjectReference obj)
     {
-        currentCharge = charges;
-
-        LightEaterAI lightEater = GetComponentInParent<LightEaterAI>();
-        if (lightEater == null) return;
-
-        if (currentCharge <= 200)
+        if (obj.TryGet(out NetworkObject networkObject))
         {
-            CustomPassManager.RemoveAura(lightEater);
-            return;
+            closestLightSource = networkObject.gameObject;
+            handleLightCoroutine = StartCoroutine(HandleLightCoroutine());
         }
-        CustomPassManager.SetupCustomPassForEnemy(lightEater);
-    }
-
-    public void HandleLight(GameObject lightSource, LightActionType actionType)
-    {
-        if (handleLightCoroutine != null) return;
-
-        NetworkObject networkObject = lightSource.GetComponent<NetworkObject>();
-        if (NetworkManager.Singleton.IsHost)
-        {
-            if (networkObject != null) HandleLightClientRpc(networkObject, (int)actionType);
-            else HandleLightClientRpc(lightSource.name, lightSource.transform.position, (int)actionType);
-            return;
-        }
-        if (networkObject != null) HandleLightServerRpc(networkObject, (int)actionType);
-        else HandleLightServerRpc(lightSource.name, lightSource.transform.position, (int)actionType);
-    }
-
-    [ServerRpc(RequireOwnership = false)]
-    public void HandleLightServerRpc(NetworkObjectReference obj, int actionType)
-        => HandleLightClientRpc(obj, actionType);
-
-    [ClientRpc]
-    public void HandleLightClientRpc(NetworkObjectReference obj, int actionType)
-    {
-        if (!obj.TryGet(out NetworkObject networkObject)) return;
-
-        currentActionType = actionType;
-        closestLightSource = networkObject.gameObject;
-        handleLightCoroutine ??= StartCoroutine(HandleLightCoroutine());
     }
 
     // Si aucun NetworkObject
-    [ServerRpc(RequireOwnership = false)]
-    public void HandleLightServerRpc(string objectName, Vector3 position, int actionType)
-        => HandleLightClientRpc(objectName, position, actionType);
-
-    // Si aucun NetworkObject
-    [ClientRpc]
-    public void HandleLightClientRpc(string objectName, Vector3 position, int actionType)
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void HandleLightEveryoneRpc(Vector3 position)
     {
-        currentActionType = actionType;
-        closestLightSource = LightEnergyManager.GetLightSourceByName(objectName, position, currentActionType == (int)LightActionType.Absorb);
-        handleLightCoroutine ??= StartCoroutine(HandleLightCoroutine());
+        closestLightSource = GetPoweredLightByPosition(position);
+        handleLightCoroutine = StartCoroutine(HandleLightCoroutine());
     }
+
+    public GameObject GetPoweredLightByPosition(Vector3 position)
+        => RoundManager.Instance.allPoweredLightsAnimators?
+            .OrderBy(p => p != null ? Vector3.Distance(position, p.transform.position) : float.MaxValue)
+            .FirstOrDefault()
+            .gameObject;
 
     public IEnumerator HandleLightCoroutine()
     {
-        bool isAbsorbing = currentActionType == (int)LightActionType.Absorb;
-        object lightSource = LightEnergyManager.DetermineLightSource(closestLightSource, isAbsorbing);
+        object lightSource = LightEnergyManager.DetermineLightSource(closestLightSource);
 
         ILightSource lightHandler = LightSourceFactory.GetLightHandler(lightSource, this);
         if (lightHandler == null)
         {
-            StopHandleLightCoroutine(false);
+            StopHandleLightCoroutine(showMsg: false);
             yield break;
         }
 
         bool completed = true;
-        totalDuration = lightSource is EnemyAI ? 10f : 5f;
-        float remainingDuration = totalDuration;
+        float duration = lightSource is EnemyAI ? 10f : 5f;
+        float remainingDuration = duration;
         float timePassed = 0f;
 
         PlayActionSound?.Invoke();
-        lightHandler.HandleLightInitialization(ref remainingDuration, isAbsorbing);
+        lightHandler.HandleLightInitialization(ref remainingDuration);
 
         while (timePassed < remainingDuration)
         {
             yield return new WaitForSeconds(0.5f);
             timePassed += 0.5f;
 
-            bool valid = isAbsorbing
-                ? lightHandler.HandleLightConsumption(totalDuration, remainingDuration, timePassed)
-                : lightHandler.HandleLightInjection(totalDuration, remainingDuration, timePassed);
-
-            if (!valid)
+            if (!lightHandler.HandleLightConsumption(duration, remainingDuration, timePassed))
             {
                 completed = false;
                 break;
@@ -134,51 +89,34 @@ public class LightEnergyNetworkManager : NetworkBehaviour
 
         lightHandler.HandleInterruptAction();
         if (completed)
-        {
-            if (isAbsorbing) lightHandler.HandleLightDepletion();
-            else lightHandler.HandleLightRestoration();
-        }
+            lightHandler.HandleLightDepletion();
 
         ResetAction?.Invoke();
-        StopHandleLightCoroutine(false);
+        StopHandleLightCoroutine(showMsg: false);
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    public void StopCoroutineServerRpc(bool showMsg)
-        => StopCoroutineClientRpc(showMsg);
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void StopHandleLightEveryoneRpc() => StopHandleLightCoroutine();
 
-    [ClientRpc]
-    public void StopCoroutineClientRpc(bool showMsg)
-        => StopHandleLightCoroutine(showMsg);
-
-    public void StopHandleLightCoroutine(bool showMsg)
+    public void StopHandleLightCoroutine(bool showMsg = true)
     {
-        if (handleLightCoroutine == null) return;
-
-        StopCoroutine(handleLightCoroutine);
-        handleLightCoroutine = null;
-
-        StopActionSound?.Invoke();
-
-        if (closestLightSource != null)
+        if (handleLightCoroutine != null)
         {
-            object lightSource = LightEnergyManager.DetermineLightSource(closestLightSource, currentActionType == (int)LightActionType.Absorb);
-            ILightSource lightHandler = LightSourceFactory.GetLightHandler(lightSource, this);
-            lightHandler?.HandleInterruptAction();
+            StopActionSound?.Invoke();
 
-            closestLightSource = null;
-        }
-
-        if (showMsg)
-        {
-            PlayerControllerB player = GetComponentInParent<Deluminator>()?.playerHeldBy;
-            if (player != null && GameNetworkManager.Instance.localPlayerController == player)
+            if (closestLightSource != null)
             {
-                if (currentActionType == (int)LightActionType.Absorb)
-                    HUDManager.Instance.DisplayTip(Constants.INFORMATION, Constants.MESSAGE_INFO_ABSORPTION_CANCELED);
-                else
-                    HUDManager.Instance.DisplayTip(Constants.INFORMATION, Constants.MESSAGE_INFO_RELEASE_CANCELED);
+                ILightSource lightHandler = LightSourceFactory.GetLightHandler(LightEnergyManager.DetermineLightSource(closestLightSource), this);
+                lightHandler?.HandleInterruptAction();
+
+                closestLightSource = null;
             }
+
+            if (showMsg && LFCUtilities.ShouldBeLocalPlayer(GetComponentInParent<Deluminator>()?.playerHeldBy))
+                HUDManager.Instance.DisplayTip(Constants.INFORMATION, Constants.MESSAGE_INFO_ABSORPTION_CANCELED);
+
+            StopCoroutine(handleLightCoroutine);
+            handleLightCoroutine = null;
         }
     }
 }

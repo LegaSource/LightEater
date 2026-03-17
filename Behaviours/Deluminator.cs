@@ -1,4 +1,8 @@
-﻿using LightEater.Managers;
+﻿using LegaFusionCore.Registries;
+using LegaFusionCore.Utilities;
+using LightEater.Managers;
+using System.Linq;
+using Unity.Netcode;
 using UnityEngine;
 
 namespace LightEater.Behaviours;
@@ -12,9 +16,17 @@ public class Deluminator : PhysicsProp
     public override void Start()
     {
         base.Start();
-        energyNetwork.PlayActionSound = PlayActionSound;
-        energyNetwork.StopActionSound = StopActionSound;
-        energyNetwork.ResetAction = ResetAction;
+        energyNetwork.PlayActionSound = () =>
+        {
+            ActionAudio.PlayOneShot(ActionSound);
+            ActionAudio.pitch = 1f;
+        };
+        energyNetwork.StopActionSound = ActionAudio.Stop;
+        energyNetwork.ResetAction = () =>
+        {
+            if (LFCUtilities.ShouldBeLocalPlayer(playerHeldBy))
+                SetControlTipsForItem();
+        };
     }
 
     public override void EquipItem()
@@ -32,13 +44,12 @@ public class Deluminator : PhysicsProp
             playerHeldBy.activatingItem = false;
             playerHeldBy.equippedUsableItemQE = false;
         }
-
-        energyNetwork.StopCoroutineServerRpc(true);
+        energyNetwork.StopHandleLightEveryoneRpc();
     }
 
     public override void DiscardItem()
     {
-        energyNetwork.StopCoroutineServerRpc(true);
+        energyNetwork.StopHandleLightEveryoneRpc();
         base.DiscardItem();
     }
 
@@ -46,69 +57,92 @@ public class Deluminator : PhysicsProp
     {
         base.ItemActivate(used, buttonDown);
 
-        if (!buttonDown || playerHeldBy == null) return;
-        StartEnergyTransfer(true);
+        if (buttonDown && playerHeldBy != null)
+            StartAbsorption();
     }
 
     public override void ItemInteractLeftRight(bool right)
     {
         base.ItemInteractLeftRight(right);
 
-        if (right || playerHeldBy == null) return;
-        StartEnergyTransfer(false);
+        if (!right && playerHeldBy != null && energyNetwork.currentCharge >= 100)
+        {
+            energyNetwork.currentCharge = Mathf.Max(0, energyNetwork.currentCharge - 100);
+            LightEnergyManager.StunExplosion(transform.position, applyStatus: true, playerHeldBy: playerHeldBy);
+            StunExplosionEveryoneRpc(transform.position);
+            SetControlTipsForItem();
+        }
     }
 
-    public void StartEnergyTransfer(bool enable)
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void StunExplosionEveryoneRpc(Vector3 position)
+    {
+        if (LFCUtilities.ShouldNotBeLocalPlayer(playerHeldBy))
+        {
+            LightEnergyManager.StunExplosion(position, applyStatus: true, playerHeldBy: playerHeldBy);
+            energyNetwork.currentCharge = Mathf.Max(0, energyNetwork.currentCharge - 100);
+        }
+    }
+
+    public void StartAbsorption()
     {
         if (!StartOfRound.Instance.shipHasLanded)
         {
             HUDManager.Instance.DisplayTip(Constants.IMPOSSIBLE_ACTION, Constants.MESSAGE_INFO_WAIT_SHIP);
             return;
         }
-
         if (energyNetwork.handleLightCoroutine != null)
         {
-            energyNetwork.StopCoroutineServerRpc(true);
+            energyNetwork.StopHandleLightEveryoneRpc();
             return;
         }
-
-        if (enable && energyNetwork.currentCharge >= 200)
+        if (energyNetwork.currentCharge >= 200)
         {
             HUDManager.Instance.DisplayTip(Constants.IMPOSSIBLE_ACTION, Constants.MESSAGE_INFO_MAX_CHARGES);
             return;
         }
-        if (!enable && energyNetwork.currentCharge <= 0)
-        {
-            HUDManager.Instance.DisplayTip(Constants.IMPOSSIBLE_ACTION, Constants.MESSAGE_INFO_MIN_CHARGES);
-            return;
-        }
-
-        energyNetwork.closestLightSource = LightEnergyManager.GetClosestLightSourceInView(this, enable);
+        energyNetwork.closestLightSource = GetClosestLightSourceInView();
         if (energyNetwork.closestLightSource == null)
         {
             HUDManager.Instance.DisplayTip(Constants.IMPOSSIBLE_ACTION, Constants.MESSAGE_INFO_NO_LIGHT);
             return;
         }
-
-        energyNetwork.HandleLight(energyNetwork.closestLightSource,
-            enable ? LightEnergyNetworkManager.LightActionType.Absorb : LightEnergyNetworkManager.LightActionType.Release);
+        energyNetwork.HandleLight(energyNetwork.closestLightSource);
     }
 
-    public void PlayActionSound()
+    public GameObject GetClosestLightSourceInView()
     {
-        if (energyNetwork.totalDuration > 0f) ActionAudio.pitch = ActionSound.length / energyNetwork.totalDuration;
-        ActionAudio.PlayOneShot(ActionSound);
-        ActionAudio.pitch = 1f;
+        foreach (RaycastHit hit in Physics.SphereCastAll(new Ray(playerHeldBy.gameplayCamera.transform.position, playerHeldBy.gameplayCamera.transform.forward), 2f, 5f))
+        {
+            GameObject lightSource = LFCSpawnRegistry.GetAllAs<EnemyAI>()?
+                .FirstOrDefault(e => !e.isEnemyDead && ConfigManager.enemiesValues.Select(v => v.EnemyName).Contains(e.enemyType.enemyName) && e == hit.collider.GetComponent<EnemyAI>())?
+                .gameObject
+                ?? LFCSpawnRegistry.GetAllAs<GrabbableObject>()?
+                    .FirstOrDefault(g => CanBeAbsorbed(g) && g == hit.collider.GetComponent<GrabbableObject>())?
+                    .gameObject
+                ?? LFCSpawnRegistry.GetSetExact<Turret>()?
+                    .Cast<Turret>()?
+                    .FirstOrDefault(t => t != null && t.turretActive && t == hit.collider.GetComponent<Turret>())?
+                    .gameObject
+                ?? LFCSpawnRegistry.GetSetExact<Landmine>()?
+                    .Cast<Landmine>()?
+                    .FirstOrDefault(l => l != null && l.mineActivated && l == hit.collider.GetComponent<Landmine>())?
+                    .gameObject
+                ?? RoundManager.Instance.allPoweredLightsAnimators?
+                    .FirstOrDefault(p => p != null && !LFCPoweredLightsRegistry.IsLocked(p) && p == hit.collider.GetComponent<Animator>())?
+                    .gameObject;
+
+            if (lightSource != null)
+                return lightSource;
+        }
+        return null;
     }
 
-    public void StopActionSound()
-        => ActionAudio.Stop();
-
-    public void ResetAction()
-    {
-        if (playerHeldBy == null || GameNetworkManager.Instance.localPlayerController != playerHeldBy) return;
-        SetControlTipsForItem();
-    }
+    public bool CanBeAbsorbed(GrabbableObject grabbableObject)
+        => grabbableObject != null
+            && grabbableObject.itemProperties.requiresBattery
+            && grabbableObject.insertedBattery != null
+            && grabbableObject.insertedBattery.charge > 0f;
 
     public override void SetControlTipsForItem()
     {

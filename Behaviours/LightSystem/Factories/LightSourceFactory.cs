@@ -32,7 +32,6 @@ public class LightSourceFactory
 
     public static ILightSource GetLightHandler(object lightSource, Deluminator deluminator) => lightSource switch
     {
-        ShipLights => new Handlers.DeluminatorHandlers.ShipLightsHandler(deluminator),
         EnemyAI enemy => new Handlers.DeluminatorHandlers.EnemyHandler(deluminator, enemy),
         GrabbableObject grabbableObject => new Handlers.DeluminatorHandlers.GrabbableObjectHandler(deluminator, grabbableObject),
         Turret turret => new Handlers.DeluminatorHandlers.TurretHandler(deluminator, turret),

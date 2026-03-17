@@ -14,9 +14,8 @@ public class GrabbableObjectHandler(LightEaterAI lightEater, GrabbableObject gra
     public override void HandleLightDepletion()
     {
         base.HandleLightDepletion();
-        lightEater.energyNetwork.UpdateCharges(lightEater.energyNetwork.currentCharge + ConfigManager.itemCharge.Value);
+        lightEater.energyNetwork.currentCharge += 20;
     }
 
-    public override Vector3 GetClosestNodePosition()
-        => lightEater.ChooseClosestNodeToPosition(GetObjectPosition()).position;
+    public override Vector3 GetClosestNodePosition() => lightEater.ChooseClosestNodeToPosition(GetObjectPosition()).position;
 }

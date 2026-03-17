@@ -14,17 +14,6 @@ public class GrabbableObjectHandler(Deluminator deluminator, GrabbableObject gra
     public override void HandleLightDepletion()
     {
         base.HandleLightDepletion();
-        int charges = Mathf.Min(200, deluminator.energyNetwork.currentCharge + ConfigManager.itemCharge.Value);
-        deluminator.energyNetwork.UpdateCharges(charges);
-    }
-
-    public override bool HandleLightInjection(float releaseDuration, float remainingDuration, float timePassed)
-        => base.HandleLightInjection(releaseDuration, remainingDuration, timePassed)
-            && !(grabbableObject.insertedBattery.charge < 1f && !LightEnergyManager.CanBeAbsorbed(grabbableObject, deluminator.transform.position, 7.5f));
-
-    public override void HandleLightRestoration()
-    {
-        base.HandleLightRestoration();
-        deluminator.energyNetwork.UpdateCharges(deluminator.energyNetwork.currentCharge - ConfigManager.itemCharge.Value);
+        deluminator.energyNetwork.currentCharge = Mathf.Min(200, deluminator.energyNetwork.currentCharge + 20);
     }
 }

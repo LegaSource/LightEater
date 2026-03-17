@@ -1,8 +1,11 @@
 ﻿using GameNetcodeStuff;
+using LegaFusionCore.Managers;
+using LegaFusionCore.Managers.NetworkManagers;
+using LegaFusionCore.Registries;
+using LegaFusionCore.Utilities;
 using LightEater.Behaviours.LightSystem.Factories;
 using LightEater.Behaviours.LightSystem.Interfaces;
 using LightEater.Managers;
-using LightEater.Patches;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -17,61 +20,42 @@ public class LightEaterAI : EnemyAI
 {
     public LightEnergyNetworkManager energyNetwork;
 
-    public bool isShocked = false; // Server side
-
     public Transform TurnCompass;
     public AudioClip[] MoveSounds = Array.Empty<AudioClip>();
-    public AudioClip AbsorptionSound;
-    public AudioClip SwingSound;
-    public AudioClip ChargeSound;
-    public AudioClip StunSound;
-    public AudioClip ExplosionSound;
-    public float moveTimer = 0f;
-
-    public List<EntranceTeleport> entrances;
+    public AudioClip[] LightEaterSounds = Array.Empty<AudioClip>();
 
     public int absorbDistance = 5;
-    private float explodeTimer = 0f;
+    public float moveTimer = 0f;
 
     public Coroutine stunCoroutine;
-    public Coroutine attackCoroutine;
-    public Coroutine killCoroutine;
+    public Coroutine swingCoroutine;
 
-    public enum State
-    {
-        WANDERING,
-        HUNTING,
-        ABSORBING,
-        CHASING
-    }
+    public enum State { WANDERING, HUNTING, ABSORBING, CHASING }
+    public enum Sound { ABSORPTION, SWING, CHARGE, EXPLOSION }
 
     public override void Start()
     {
         base.Start();
 
-        energyNetwork.PlayActionSound = PlayAbsorptionSound;
-        energyNetwork.StopActionSound = StopAbsorptionSound;
+        energyNetwork.PlayActionSound = () =>
+        {
+            //if (energyNetwork.totalDuration > 0f) creatureSFX.pitch = AbsorptionSound.length / energyNetwork.totalDuration;
+            creatureSFX.PlayOneShot(LightEaterSounds[(int)Sound.ABSORPTION]);
+            creatureSFX.pitch = 1f;
+        };
+        energyNetwork.StopActionSound = creatureSFX.Stop;
 
-        enemyType.canDie = false;
         currentBehaviourStateIndex = (int)State.WANDERING;
-        creatureAnimator.SetTrigger("startWalk");
         StartSearch(transform.position);
-
-        entrances = FindObjectsOfType<EntranceTeleport>().ToList();
-        StormyWeatherPatch.lightEaters.Add(this);
     }
 
     public override void Update()
     {
         base.Update();
-
         if (isEnemyDead || StartOfRound.Instance.allPlayersDead) return;
 
-        explodeTimer += Time.deltaTime;
-
         PlayMoveSound();
-        int state = currentBehaviourStateIndex;
-        if (targetPlayer != null && (state == (int)State.CHASING))
+        if (targetPlayer != null && (currentBehaviourStateIndex == (int)State.CHASING))
         {
             TurnCompass.LookAt(targetPlayer.gameplayCamera.transform.position);
             transform.rotation = Quaternion.Lerp(transform.rotation, Quaternion.Euler(new Vector3(0f, TurnCompass.eulerAngles.y, 0f)), 4f * Time.deltaTime);
@@ -80,13 +64,14 @@ public class LightEaterAI : EnemyAI
 
     public void PlayMoveSound()
     {
-        if (currentBehaviourStateIndex == (int)State.ABSORBING) return;
-
-        moveTimer -= Time.deltaTime;
-        if (MoveSounds.Length > 0 && moveTimer <= 0)
+        if (currentBehaviourStateIndex != (int)State.ABSORBING)
         {
-            creatureSFX.PlayOneShot(MoveSounds[UnityEngine.Random.Range(0, MoveSounds.Length)]);
-            moveTimer = 3f;
+            moveTimer -= Time.deltaTime;
+            if (MoveSounds.Length > 0 && moveTimer <= 0)
+            {
+                creatureSFX.PlayOneShot(MoveSounds[UnityEngine.Random.Range(0, MoveSounds.Length)]);
+                moveTimer = 3f;
+            }
         }
     }
 
@@ -98,45 +83,29 @@ public class LightEaterAI : EnemyAI
 
         switch (currentBehaviourStateIndex)
         {
-            case (int)State.WANDERING:
-                DoWandering();
-                break;
-            case (int)State.HUNTING:
-                DoHunting();
-                break;
-            case (int)State.ABSORBING:
-                DoAbsorbing();
-                break;
-            case (int)State.CHASING:
-                DoChasing();
-                break;
+            case (int)State.WANDERING: DoWandering(); break;
+            case (int)State.HUNTING: DoHunting(); break;
+            case (int)State.ABSORBING: DoAbsorbing(); break;
+            case (int)State.CHASING: DoChasing(); break;
         }
     }
 
     public void DoWandering()
     {
         agent.speed = 2f;
-        if (FoundClosestPlayerInRange(25, 10))
+        if (this.FoundClosestPlayerInRange(25, 10))
         {
             energyNetwork.closestLightSource = null;
             StopSearch(currentSearch);
-            DoAnimationClientRpc("startRun");
             SwitchToBehaviourClientRpc((int)State.CHASING);
             return;
         }
-        if (energyNetwork.currentCharge > 200 || FoundLightSource())
+        if (FoundLightSource())
         {
             StopSearch(currentSearch);
-            DoAnimationClientRpc("startRun");
             SwitchToBehaviourClientRpc((int)State.HUNTING);
             return;
         }
-    }
-
-    private bool FoundClosestPlayerInRange(int range, int senseRange)
-    {
-        PlayerControllerB player = CheckLineOfSightForPlayer(60f, range, senseRange);
-        return player != null && PlayerIsTargetable(player) && (bool)(targetPlayer = player);
     }
 
     public bool FoundLightSource()
@@ -145,92 +114,86 @@ public class LightEaterAI : EnemyAI
         if (CrossingLight()) return true;
 
         // Se diriger vers la lumière la plus proche
-        if (TimeOfDay.Instance.hour >= ConfigManager.shipMinHour.Value && !ShipLightsPatch.hasBeenAbsorbed)
+        if (CanAbsorbShip())
         {
             absorbDistance = 20;
             energyNetwork.closestLightSource = StartOfRound.Instance.shipRoomLights.gameObject;
+            return energyNetwork.closestLightSource != null;
         }
-        else if (LightEnergyManager.enemies.Any(r => !r.isEnemyDead))
+
+        IEnumerable<EnemyAI> enemies = LFCSpawnRegistry.GetAllAs<EnemyAI>()?
+            .Where(e => !e.isEnemyDead && ConfigManager.enemiesValues.Select(v => v.EnemyName).Contains(e.enemyType.enemyName));
+        if (enemies.Any())
         {
-            EnemyAI closestEnemy = LightEnergyManager.enemies.Where(r => !r.isEnemyDead)
-                .OrderBy(r => Vector3.Distance(transform.position, r.transform.position))
-                .FirstOrDefault();
+            EnemyAI closestEnemy = enemies.OrderBy(r => Vector3.Distance(transform.position, r.transform.position)).FirstOrDefault();
             absorbDistance = ConfigManager.enemiesValues
                 .FirstOrDefault(e => e.EnemyName.Equals(closestEnemy.enemyType.enemyName))?
                 .AbsorbDistance
                     ?? 5;
             energyNetwork.closestLightSource = closestEnemy.gameObject;
+            return energyNetwork.closestLightSource != null;
+        }
+
+        absorbDistance = 5;
+        if (!isOutside)
+        {
+            path1 = new NavMeshPath();
+            energyNetwork.closestLightSource = RoundManager.Instance.allPoweredLightsAnimators?
+                .Where(p => p != null && !LFCPoweredLightsRegistry.IsLocked(p) && agent.CalculatePath(ChooseClosestNodeToPosition(p.transform.position).position, path1))
+                .OrderBy(p => Vector3.Distance(transform.position, p.transform.position))
+                .FirstOrDefault()?
+                .gameObject;
         }
         else
         {
-            absorbDistance = 5;
-            if (!isOutside)
-            {
-                path1 = new NavMeshPath();
-                energyNetwork.closestLightSource = LightEnergyManager.GetPoweredLights(true)
-                    .Where(l => l != null && agent.CalculatePath(ChooseClosestNodeToPosition(l.transform.position).position, path1))
-                    .OrderBy(l => Vector3.Distance(transform.position, l.transform.position))
-                    .FirstOrDefault()?
-                    .gameObject;
-            }
-            else
-            {
-                energyNetwork.closestLightSource = LightEnergyManager.GetPoweredLights(true)
-                    .OrderBy(l => l ? Vector3.Distance(GetEntranceExitPosition(GetClosestEntrance()), l.transform.position) : float.MaxValue)
-                    .FirstOrDefault()?
-                    .gameObject;
-            }
+            energyNetwork.closestLightSource = RoundManager.Instance.allPoweredLightsAnimators?
+                .Where(p => p != null && !LFCPoweredLightsRegistry.IsLocked(p))
+                .OrderBy(p => p ? Vector3.Distance(LFCEnemyManager.GetEntranceExitPosition(this.GetClosestEntrance()), p.transform.position) : float.MaxValue)
+                .FirstOrDefault()?
+                .gameObject;
         }
         return energyNetwork.closestLightSource != null;
     }
 
+    public bool CanAbsorbShip()
+        => TimeOfDay.Instance.hour >= ConfigManager.shipMinHour.Value
+        && ((ConfigManager.disableShipLights.Value && !LFCShipFeatureRegistry.IsLocked(LFCShipFeatureRegistry.ShipFeatureType.SHIP_LIGHTS))
+            || (ConfigManager.disableShipScreen.Value && !LFCShipFeatureRegistry.IsLocked(LFCShipFeatureRegistry.ShipFeatureType.MAP_SCREEN))
+            || (ConfigManager.disableShipDoors.Value && !LFCShipFeatureRegistry.IsLocked(LFCShipFeatureRegistry.ShipFeatureType.SHIP_DOORS))
+            || (ConfigManager.disableShipLever.Value && !LFCShipFeatureRegistry.IsLocked(LFCShipFeatureRegistry.ShipFeatureType.SHIP_LEVER))
+            || (ConfigManager.disableTerminal.Value && !LFCShipFeatureRegistry.IsLocked(LFCShipFeatureRegistry.ShipFeatureType.SHIP_TERMINAL))
+            || (ConfigManager.disableItemCharger.Value && !LFCShipFeatureRegistry.IsLocked(LFCShipFeatureRegistry.ShipFeatureType.ITEM_CHARGER))
+            || (ConfigManager.disableShipTV.Value && !LFCShipFeatureRegistry.IsLocked(LFCShipFeatureRegistry.ShipFeatureType.SHIP_TV))
+            || (ConfigManager.disableShipTeleporters.Value && !LFCShipFeatureRegistry.IsLocked(LFCShipFeatureRegistry.ShipFeatureType.SHIP_TELEPORTERS))
+            || (ConfigManager.disableSmartCupboard.Value && !LFCShipFeatureRegistry.IsLocked(LFCShipFeatureRegistry.ShipFeatureType.SMART_CUPBOARD)));
+
     public void DoHunting()
     {
-        agent.speed = ConfigManager.huntingSpeed.Value;
-        if (FoundClosestPlayerInRange(25, 10))
+        agent.speed = 4f;
+        if (this.FoundClosestPlayerInRange(25, 10))
         {
             energyNetwork.closestLightSource = null;
             SwitchToBehaviourClientRpc((int)State.CHASING);
             return;
         }
-        if (HuntPlayers()) return;
         if (CloseToLightSource())
         {
-            DoAnimationClientRpc("startAbsorb");
+            DoAnimationEveryoneRpc("startAbsorb");
             SwitchToBehaviourClientRpc((int)State.ABSORBING);
             return;
         }
     }
 
-    public bool HuntPlayers()
-    {
-        if (energyNetwork.currentCharge <= 200 && energyNetwork.closestLightSource != null) return false;
-
-        PlayerControllerB closestPlayer = StartOfRound.Instance.allPlayerScripts
-            .Where(p => p.isPlayerControlled && !p.isPlayerDead)
-            .OrderBy(p => Vector3.Distance(transform.position, p.transform.position))
-            .FirstOrDefault();
-
-        if (closestPlayer.isInsideFactory == isOutside)
-        {
-            GoTowardsEntrance();
-            return true;
-        }
-
-        _ = SetDestinationToPosition(closestPlayer.transform.position);
-        return true;
-    }
-
     public bool CloseToLightSource()
     {
         _ = CrossingLight();
-        object lightSource = LightEnergyManager.DetermineLightSource(energyNetwork.closestLightSource, true);
+        object lightSource = LightEnergyManager.DetermineLightSource(energyNetwork.closestLightSource);
 
         if ((lightSource is ShipLights && !isOutside)
             || (lightSource is EnemyAI enemy && enemy.isOutside != isOutside)
             || (lightSource is Animator && isOutside))
         {
-            GoTowardsEntrance();
+            this.GoTowardsEntrance();
             return false;
         }
 
@@ -247,181 +210,113 @@ public class LightEaterAI : EnemyAI
         if (energyNetwork.closestLightSource == null || !StartOfRound.Instance.shipHasLanded)
         {
             StartSearch(transform.position);
-            DoAnimationClientRpc("startWalk");
+            DoAnimationEveryoneRpc("startMove");
             SwitchToBehaviourClientRpc((int)State.WANDERING);
             return;
         }
-        energyNetwork.HandleLight(energyNetwork.closestLightSource, LightEnergyNetworkManager.LightActionType.Absorb);
+        energyNetwork.HandleLight(energyNetwork.closestLightSource);
     }
-
-    public void PlayAbsorptionSound()
-    {
-        if (energyNetwork.totalDuration > 0f) creatureSFX.pitch = AbsorptionSound.length / energyNetwork.totalDuration;
-        creatureSFX.PlayOneShot(AbsorptionSound);
-        creatureSFX.pitch = 1f;
-    }
-
-    public void StopAbsorptionSound()
-        => creatureSFX.Stop();
 
     public void DoChasing()
     {
-        if (stunCoroutine != null) return;
+        if (stunCoroutine != null || swingCoroutine != null) return;
 
-        agent.speed = isShocked ? ConfigManager.chasingSpeed.Value / 2f : ConfigManager.chasingSpeed.Value;
-        if (TargetOutsideChasedPlayer()) return;
-
-        if (explodeTimer < 10f)
-        {
-            SetMovingTowardsTargetPlayer(targetPlayer);
-            return;
-        }
-        if (!TargetClosestPlayerInAnyCase() || (Vector3.Distance(transform.position, targetPlayer.transform.position) > 20f && !CheckLineOfSightForPosition(targetPlayer.transform.position)))
+        agent.speed = 5f;
+        if (this.TargetOutsideChasedPlayer()) return;
+        if (!this.TargetClosestPlayerInAnyCase(out float distanceWithPlayer) || (distanceWithPlayer > 20f && !CheckLineOfSightForPosition(targetPlayer.transform.position)))
         {
             StartSearch(transform.position);
-            DoAnimationClientRpc("startWalk");
             SwitchToBehaviourClientRpc((int)State.WANDERING);
             return;
         }
-        if (StunExplosion()) return;
-        if (CrossingLight())
+        if (!LFCStatusEffectRegistry.HasStatus(targetPlayer.gameObject, LFCStatusEffectRegistry.StatusEffectType.LIGHTNING))
         {
-            DoAnimationClientRpc("startAbsorb");
-            SwitchToBehaviourClientRpc((int)State.ABSORBING);
-            return;
+            if (StunExplosion()) return;
+            if (CrossingLight())
+            {
+                DoAnimationEveryoneRpc("startAbsorb");
+                SwitchToBehaviourClientRpc((int)State.ABSORBING);
+                return;
+            }
         }
         SetMovingTowardsTargetPlayer(targetPlayer);
     }
 
-    public bool TargetOutsideChasedPlayer()
+    public bool StunExplosion()
     {
-        if (targetPlayer.isInsideFactory == isOutside)
+        if (energyNetwork.currentCharge >= 100 && targetPlayer.HasLineOfSightToPosition(eye.position, width: 60f, range: 12, proximityAwareness: 2f))
         {
-            GoTowardsEntrance();
+            agent.speed = 0f;
+            energyNetwork.currentCharge -= 100;
+            stunCoroutine = StartCoroutine(StunExplosionCoroutine());
             return true;
         }
         return false;
     }
 
-    public bool TargetClosestPlayerInAnyCase()
-    {
-        mostOptimalDistance = 2000f;
-        targetPlayer = null;
-        for (int i = 0; i < StartOfRound.Instance.connectedPlayersAmount + 1; i++)
-        {
-            tempDist = Vector3.Distance(transform.position, StartOfRound.Instance.allPlayerScripts[i].transform.position);
-            if (tempDist < mostOptimalDistance)
-            {
-                mostOptimalDistance = tempDist;
-                targetPlayer = StartOfRound.Instance.allPlayerScripts[i];
-            }
-        }
-        return targetPlayer != null;
-    }
-
-    public bool StunExplosion()
-    {
-        if (isShocked) return false;
-        if (energyNetwork.currentCharge < 100 || explodeTimer < 10f) return false;
-        if (!targetPlayer.HasLineOfSightToPosition(eye.position, 60f, 15)) return false;
-
-        agent.speed = 0f;
-
-        if (energyNetwork.currentCharge > 200)
-        {
-            StunEnemyClientRpc();
-            return true;
-        }
-
-        energyNetwork.UpdateCharges(energyNetwork.currentCharge - 100);
-        explodeTimer = 0f;
-
-        StunExplosionClientRpc();
-        return true;
-    }
-
-    [ClientRpc]
-    public void StunEnemyClientRpc()
-        => stunCoroutine = StartCoroutine(StunEnemyCoroutine());
-
-    public IEnumerator StunEnemyCoroutine()
-    {
-        creatureAnimator.SetTrigger("startStun");
-        creatureSFX.PlayOneShot(StunSound);
-        enemyType.canDie = true;
-
-        yield return new WaitForSeconds(5f);
-
-        if (killCoroutine == null)
-        {
-            energyNetwork.UpdateCharges(200);
-            creatureAnimator.SetTrigger("startRun");
-            enemyType.canDie = false;
-            stunCoroutine = null;
-        }
-    }
-
-    [ClientRpc]
-    public void StunExplosionClientRpc()
-        => StartCoroutine(StunExplosionCoroutine());
-
     public IEnumerator StunExplosionCoroutine()
     {
-        creatureAnimator.SetTrigger("startExplode");
-        creatureSFX.PlayOneShot(ChargeSound);
+        DoAnimationEveryoneRpc("startExplode");
+        PlayAudioEveryoneRpc((int)Sound.CHARGE);
 
-        yield return new WaitForSeconds(0.75f);
+        yield return this.WaitForFullAnimation("explode");
 
-        creatureSFX.PlayOneShot(ExplosionSound);
-        StunGrenadeItem.StunExplosion(eye.position, affectAudio: true, flashSeverityMultiplier: 2f, enemyStunTime: 2f);
-        creatureAnimator.SetTrigger("startRun");
+        PlayAudioEveryoneRpc((int)Sound.EXPLOSION);
+        DoAnimationEveryoneRpc("startMove");
+        StunExplosionEveryoneRpc(eye.position, applyStatus: true);
+
+        stunCoroutine = null;
     }
+
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void StunExplosionEveryoneRpc(Vector3 position, bool applyStatus) => LightEnergyManager.StunExplosion(position, applyStatus, enemyWhoExplode: this);
 
     public override void OnCollideWithPlayer(Collider other)
     {
         base.OnCollideWithPlayer(other);
 
-        if (currentBehaviourStateIndex != (int)State.CHASING) return;
-        if (stunCoroutine != null || attackCoroutine != null || killCoroutine != null) return;
-
+        if (isEnemyDead || currentBehaviourStateIndex != (int)State.CHASING || stunCoroutine != null || swingCoroutine != null) return;
         PlayerControllerB player = MeetsStandardPlayerCollisionConditions(other);
-        if (player == null || player != GameNetworkManager.Instance.localPlayerController) return;
+        if (!LFCUtilities.ShouldBeLocalPlayer(player)) return;
 
-        AttackServerRpc((int)player.playerClientId);
+        SwingServerRpc((int)player.playerClientId);
     }
 
     [ServerRpc(RequireOwnership = false)]
-    public void AttackServerRpc(int playerId)
-        => AttackClientRpc(playerId);
+    public void SwingServerRpc(int playerId) => swingCoroutine ??= StartCoroutine(SwingCoroutine(playerId));
 
-    [ClientRpc]
-    public void AttackClientRpc(int playerId)
-        => attackCoroutine ??= StartCoroutine(AttackCoroutine(StartOfRound.Instance.allPlayerObjects[playerId].GetComponent<PlayerControllerB>()));
-
-    public IEnumerator AttackCoroutine(PlayerControllerB player)
+    public IEnumerator SwingCoroutine(int playerId)
     {
-        creatureAnimator.SetTrigger("startAttack");
-        creatureSFX.PlayOneShot(SwingSound);
+        DoAnimationEveryoneRpc("startSwing");
+        PlayAudioEveryoneRpc((int)Sound.SWING);
 
-        yield return new WaitForSeconds(0.8f);
+        yield return this.WaitForFullAnimation("swing");
+        LFCNetworkManager.Instance.DamagePlayerEveryoneRpc(playerId, ConfigManager.damage.Value, hasDamageSFX: true, callRPC: true, (int)CauseOfDeath.Crushing);
 
-        player.DamagePlayer(ConfigManager.damage.Value, hasDamageSFX: true, callRPC: true, CauseOfDeath.Crushing);
-        creatureAnimator.SetTrigger("startRun");
-        attackCoroutine = null;
+        DoAnimationEveryoneRpc("startMove");
+        if (StartOfRound.Instance.allPlayerObjects[playerId].GetComponent<PlayerControllerB>().isPlayerDead)
+        {
+            StartSearch(transform.position);
+            SwitchToBehaviourClientRpc((int)State.WANDERING);
+        }
+
+        swingCoroutine = null;
     }
 
     public bool CrossingLight()
     {
-        GameObject crossedLight = LightEnergyManager.GetPoweredLights(true)
-            .FirstOrDefault(l => l != null && Vector3.Distance(transform.position, l.transform.position) <= 10f)?
+        GameObject crossedLight = RoundManager.Instance.allPoweredLightsAnimators?
+            .FirstOrDefault(p => p != null && !LFCPoweredLightsRegistry.IsLocked(p) && Vector3.Distance(transform.position, p.transform.position) <= 10f)?
             .gameObject
-            ?? LightEnergyManager.grabbableObjects
+            ?? LFCSpawnRegistry.GetAllAs<GrabbableObject>()?
                 .FirstOrDefault(g => LightEnergyManager.CanBeAbsorbed(g, transform.position, 10f))?
                 .gameObject
-            ?? LightEnergyManager.GetTurrets(true)
+            ?? LFCSpawnRegistry.GetSetExact<Turret>()?
+                .Cast<Turret>()?
                 .FirstOrDefault(t => t != null && t.turretActive && Vector3.Distance(transform.position, t.transform.position) <= 10f)?
                 .gameObject
-            ?? LightEnergyManager.GetLandmines(true)
+            ?? LFCSpawnRegistry.GetSetExact<Landmine>()?
+                .Cast<Landmine>()?
                 .FirstOrDefault(l => l != null && l.mineActivated && Vector3.Distance(transform.position, l.transform.position) <= 10f)?
                 .gameObject;
 
@@ -434,94 +329,39 @@ public class LightEaterAI : EnemyAI
         return energyNetwork.closestLightSource != null;
     }
 
-    public void GoTowardsEntrance()
-    {
-        EntranceTeleport entranceTeleport = GetClosestEntrance();
-
-        if (Vector3.Distance(transform.position, entranceTeleport.entrancePoint.position) < 1f)
-        {
-            Vector3 exitPosition = GetEntranceExitPosition(entranceTeleport);
-            _ = StartCoroutine(TeleportEnemyCoroutine(exitPosition));
-            return;
-        }
-
-        _ = SetDestinationToPosition(entranceTeleport.entrancePoint.position);
-    }
-
-    public EntranceTeleport GetClosestEntrance()
-        => entrances.Where(e => e.isEntranceToBuilding == isOutside)
-            .OrderBy(e => Vector3.Distance(transform.position, e.entrancePoint.position))
-            .FirstOrDefault();
-
-    public Vector3 GetEntranceExitPosition(EntranceTeleport entranceTeleport)
-        => entrances.FirstOrDefault(e => e.isEntranceToBuilding != entranceTeleport.isEntranceToBuilding && e.entranceId == entranceTeleport.entranceId)
-            .entrancePoint
-            .position;
-
-    public IEnumerator TeleportEnemyCoroutine(Vector3 position)
-    {
-        yield return new WaitForSeconds(1f);
-        TeleportEnemyClientRpc(position, !isOutside);
-    }
-
-    [ClientRpc]
-    public void TeleportEnemyClientRpc(Vector3 teleportPosition, bool isOutside)
-    {
-        SetEnemyOutside(isOutside);
-        serverPosition = teleportPosition;
-        transform.position = teleportPosition;
-        _ = agent.Warp(teleportPosition);
-        SyncPositionToClients();
-    }
-
-    [ServerRpc(RequireOwnership = false)]
-    public void StopShockingServerRpc()
-        => isShocked = false;
-
     public override void HitEnemy(int force = 1, PlayerControllerB playerWhoHit = null, bool playHitSFX = false, int hitID = -1)
     {
-        if (isEnemyDead || !enemyType.canDie) return;
+        if (!isEnemyDead)
+        {
+            base.HitEnemy(force, playerWhoHit, playHitSFX, hitID);
+            enemyHP -= force;
 
-        base.HitEnemy(force, playerWhoHit, playHitSFX, hitID);
-        enemyHP -= force;
-        if (enemyHP <= 0 && IsOwner) KillEnemyOnOwnerClient(!LightEater.isSellBodies);
+            if (IsOwner)
+            {
+                if (energyNetwork.currentCharge > 0)
+                    StunExplosionEveryoneRpc(eye.position, applyStatus: energyNetwork.currentCharge >= 100);
+                if (enemyHP <= 0)
+                    KillEnemyOnOwnerClient();
+                energyNetwork.currentCharge = 0;
+            }
+        }
     }
 
     public override void KillEnemy(bool destroy = false)
     {
-        _ = StormyWeatherPatch.lightEaters.Remove(this);
-        killCoroutine = StartCoroutine(KillEnemyCoroutine(destroy));
+        base.KillEnemy();
+
+        if (LFCUtilities.IsServer && ConfigManager.isDeluminator.Value)
+            _ = LFCObjectsManager.SpawnObjectForServer(LightEater.deluminatorObj, transform.position + (Vector3.up * 0.5f));
     }
 
-    public IEnumerator KillEnemyCoroutine(bool destroy)
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void PlayAudioEveryoneRpc(int enemySound)
     {
-        creatureAnimator.SetTrigger("startExplode");
-        creatureSFX.PlayOneShot(ChargeSound);
-
-        yield return new WaitForSeconds(4f);
-
-        energyNetwork.StopHandleLightCoroutine(false);
-        if (ConfigManager.isDeluminator.Value && (IsServer || IsHost)) SpawnDeluminator(LightEater.deluminatorObj, transform.position + (Vector3.up * 0.5f));
-        CustomPassManager.RemoveAura(this);
-
-        base.KillEnemy(destroy);
-        Landmine.SpawnExplosion(transform.position + Vector3.up, spawnExplosionEffect: true, 6f, 6.3f);
+        if (LightEaterSounds.Length > 0)
+            creatureSFX.PlayOneShot(LightEaterSounds[enemySound]);
     }
 
-    public void SpawnDeluminator(GameObject spawnPrefab, Vector3 position)
-    {
-        GameObject gameObject = Instantiate(spawnPrefab, position, Quaternion.identity, StartOfRound.Instance.propsContainer);
-        GrabbableObject grabbableObject = gameObject.GetComponent<GrabbableObject>();
-        grabbableObject.fallTime = 0f;
-        grabbableObject.isInFactory = !isOutside;
-        gameObject.GetComponent<NetworkObject>().Spawn();
-    }
-
-    [ServerRpc(RequireOwnership = false)]
-    public void DoAnimationServerRpc(string animationState)
-        => DoAnimationClientRpc(animationState);
-
-    [ClientRpc]
-    public void DoAnimationClientRpc(string animationState)
-        => creatureAnimator.SetTrigger(animationState);
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void DoAnimationEveryoneRpc(string animationState) => creatureAnimator.SetTrigger(animationState);
 }

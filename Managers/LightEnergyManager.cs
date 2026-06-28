@@ -1,10 +1,10 @@
 ﻿using GameNetcodeStuff;
-using LegaFusionCore.Managers.NetworkManagers;
 using LegaFusionCore.Registries;
 using LegaFusionCore.Utilities;
+using LethalStatus.Managers;
 using System.Linq;
 using UnityEngine;
-using static LegaFusionCore.Registries.LFCStatusEffectRegistry;
+using static LethalStatus.StatusEffects.LSStatusEffectRegistry;
 
 namespace LightEater.Managers;
 public class LightEnergyManager
@@ -45,7 +45,7 @@ public class LightEnergyManager
         {
             if (applyStatus)
             {
-                LFCNetworkManager.Instance.ApplyStatusEveryoneRpc(playerId: playerHeldBy != null ? (int)playerHeldBy.playerClientId : -1,
+                LSNetworkManager.Instance.ApplyStatusEveryoneRpc(playerId: playerHeldBy != null ? (int)playerHeldBy.playerClientId : -1,
                     targetId: (int)player.playerClientId,
                     type: (int)StatusEffectType.LIGHTNING,
                     duration: 10,
@@ -69,7 +69,7 @@ public class LightEnergyManager
                 {
                     if (applyStatus)
                     {
-                        LFCNetworkManager.Instance.ApplyStatusEveryoneRpc(playerId: playerHeldBy != null ? (int)playerHeldBy.playerClientId : -1,
+                        LSNetworkManager.Instance.ApplyStatusEveryoneRpc(playerId: playerHeldBy != null ? (int)playerHeldBy.playerClientId : -1,
                             enemyObj: enemy.NetworkObject,
                             type: (int)StatusEffectType.LIGHTNING,
                             duration: 10,

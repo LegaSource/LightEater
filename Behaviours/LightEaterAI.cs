@@ -3,6 +3,7 @@ using LegaFusionCore.Managers;
 using LegaFusionCore.Managers.NetworkManagers;
 using LegaFusionCore.Registries;
 using LegaFusionCore.Utilities;
+using LethalStatus.StatusEffects;
 using LightEater.Behaviours.LightSystem.Factories;
 using LightEater.Behaviours.LightSystem.Interfaces;
 using LightEater.Managers;
@@ -229,7 +230,7 @@ public class LightEaterAI : EnemyAI
             SwitchToBehaviourClientRpc((int)State.WANDERING);
             return;
         }
-        if (!LFCStatusEffectRegistry.HasStatus(targetPlayer.gameObject, LFCStatusEffectRegistry.StatusEffectType.LIGHTNING))
+        if (!LSStatusEffectRegistry.HasStatus(targetPlayer.gameObject, LSStatusEffectRegistry.StatusEffectType.LIGHTNING))
         {
             if (StunExplosion()) return;
             if (CrossingLight())

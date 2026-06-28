@@ -2,6 +2,7 @@
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
+using LegaFusionCore.Managers;
 using LethalLib.Modules;
 using LightEater.Behaviours;
 using LightEater.Managers;
@@ -19,7 +20,7 @@ public class LightEater : BaseUnityPlugin
 {
     internal const string modGUID = "Lega.LightEater";
     internal const string modName = "Light Eater";
-    internal const string modVersion = "1.1.0";
+    internal const string modVersion = "1.1.1";
 
     private readonly Harmony harmony = new Harmony(modGUID);
     private static readonly AssetBundle bundle = AssetBundle.LoadFromFile(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "lighteater"));
@@ -73,23 +74,7 @@ public class LightEater : BaseUnityPlugin
 
     public void LoadItems()
     {
-        if (ConfigManager.isDeluminator.Value) deluminatorObj = RegisterItem(typeof(Deluminator), bundle.LoadAsset<Item>("Assets/Deluminator/DeluminatorItem.asset")).spawnPrefab;
-    }
-
-    public Item RegisterItem(Type type, Item item)
-    {
-        if (item.spawnPrefab.GetComponent(type) == null)
-        {
-            PhysicsProp script = item.spawnPrefab.AddComponent(type) as PhysicsProp;
-            script.grabbable = true;
-            script.grabbableToEnemies = true;
-            script.itemProperties = item;
-        }
-
-        NetworkPrefabs.RegisterNetworkPrefab(item.spawnPrefab);
-        Utilities.FixMixerGroups(item.spawnPrefab);
-        Items.RegisterItem(item);
-
-        return item;
+        if (ConfigManager.isDeluminator.Value)
+            deluminatorObj = LFCObjectsManager.RegisterObject(typeof(Deluminator), bundle.LoadAsset<Item>("Assets/Deluminator/DeluminatorItem.asset")).spawnPrefab;
     }
 }
